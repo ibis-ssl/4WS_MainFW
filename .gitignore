@@ -1,0 +1,38 @@
+# CMake build output
+/build/
+/out/
+
+# Compiler and linker output
+*.a
+*.bin
+*.cyclo
+*.d
+*.elf
+*.hex
+*.list
+*.map
+*.o
+*.obj
+*.su
+
+# Editor and analysis caches
+__pycache__/
+*.pyc
+/.cache/
+/.clangd/
+/.vscode/.browse.VC.db*
+/.vscode/ipch/
+
+# Local logs
+/log/
+/Script/log/
+*.log
+
+# User-local configuration
+*.code-workspace
+.env
+.env.local
+
+# OS files
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,114 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Build: Debug",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/Script/build.ps1",
+        "-Configuration",
+        "Debug",
+        "-CubeCLTPath",
+        "${config:STM32VSCodeExtension.cubeCLT.path}"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Build: Release",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/Script/build.ps1",
+        "-Configuration",
+        "Release",
+        "-CubeCLTPath",
+        "${config:STM32VSCodeExtension.cubeCLT.path}"
+      ],
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Build: Rebuild Debug",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/Script/build.ps1",
+        "-Configuration",
+        "Debug",
+        "-CubeCLTPath",
+        "${config:STM32VSCodeExtension.cubeCLT.path}",
+        "-Rebuild"
+      ],
+      "group": "build",
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Flash: Build and Flash Debug",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/Script/build_and_flash.ps1",
+        "-Configuration",
+        "Debug",
+        "-CubeCLTPath",
+        "${config:STM32VSCodeExtension.cubeCLT.path}"
+      ],
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Flash: Dry Run Debug",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/Script/build_and_flash.ps1",
+        "-Configuration",
+        "Debug",
+        "-CubeCLTPath",
+        "${config:STM32VSCodeExtension.cubeCLT.path}",
+        "-DryRun"
+      ],
+      "problemMatcher": "$gcc"
+    },
+    {
+      "label": "Flash: List ST-LINK Probes",
+      "type": "process",
+      "command": "powershell",
+      "args": [
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        "${workspaceFolder}/Script/flash.ps1",
+        "-CubeCLTPath",
+        "${config:STM32VSCodeExtension.cubeCLT.path}",
+        "-List"
+      ],
+      "problemMatcher": []
+    }
+  ]
+}

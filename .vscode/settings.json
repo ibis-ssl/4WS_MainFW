@@ -1,0 +1,13 @@
+{
+  "STM32VSCodeExtension.cubeCLT.path": "C:/ST/STM32CubeCLT_1.21.0",
+  "cmake.useCMakePresets": "always",
+  "cmake.configureOnOpen": false,
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build/Debug/compile_commands.json",
+  "[c]": {
+    "editor.defaultFormatter": "ms-vscode.cpptools",
+    "editor.formatOnSave": true
+  },
+  "files.associations": {
+    "*.h": "c"
+  }
+}
