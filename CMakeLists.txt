@@ -45,7 +45,19 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 # Add sources to executable
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # ユーザーコードはCubeMX生成先から分離し、対象ファイルを明示する。
+    Application/App/app.c
+    Application/Board/board_buzzer.c
+    Application/Board/board_can.c
+    Application/Board/board_debug_uart.c
     Application/Board/board_gpio.c
+    Application/Board/board_pwm_math.c
+    Application/Board/board_time.c
+    Application/Board/board_user_adc.c
+    Application/Device/buzzer.c
+    Application/Device/power_board.c
+    Application/Device/user_switch.c
+    Application/Device/user_switch_board.c
+    Application/Protocol/power_packet.c
 )
 
 # Add include paths

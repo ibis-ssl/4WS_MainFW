@@ -20,7 +20,7 @@
 | `Application/Control/` | 4輪操舵の運動学、フィードバック制御、推定・フィルター | `steering_control`、`drive_control`、`odometry` |
 | `Application/App/` | 起動、周期処理、モード遷移、指令の選択、通信断・異常時の判断、出力の統括 | `app`、`app_mode`、`app_control`、`app_comm` |
 
-今回実際に作成するユーザーモジュールは`Application/Board/board_gpio.c/.h`のみ。他のディレクトリと上表のモジュール名は配置方針であり、必要になった時点で作成する。空の初期化関数や成功を返すだけのドライバは用意しない。
+現在はBoardのGPIO・CAN・UART4・ユーザーADC・ブザー、DeviceのユーザーSW・ブザー・電源、Protocolの電源形式、Appの起動・処理を実装している。詳細は[基礎ドライバ](drivers.md)を参照する。Controlと他の機器モジュールは必要になった時点で作成する。空の初期化関数や成功を返すだけのドライバは用意しない。
 
 ## 依存方向
 
@@ -70,10 +70,10 @@
 
 APIはビルド対象へ登録するが、起動処理からは呼び出さない。基板の動作確認は未実施であり、この追加により出力試験が自動実行されることはない。
 
-次は回路と機器仕様に応じてADC取得、入力判定、PWM、SPI/CAN転送、機器ドライバへ進める。特にADCの変換対象は現在PHOTO_0だけであること、SPI2スレーブに対してCM4_CSが出力設定であることを解決してから、それぞれの運用を実装する。
+CAN、UART4、ブザー、U_BTNの基礎ドライバは起動処理へ接続済み。GPIO API自体は起動処理から操作しない。ADC1の取得対象はU_BTNだけに変更した。SPI2スレーブに対してCM4_CSが出力である点は未解決で、CM4通信は未実装。
 
 ## ビルドと生成コード
 
-ソース一覧とincludeパスはルート`CMakeLists.txt`へ明示登録し、自動探索は使用しない。今回の登録は`Application/Board/board_gpio.c`とincludeルート`Application/`。CubeMX管理の`cmake/stm32cubemx/CMakeLists.txt`は編集しない。
+ソース一覧とincludeパスはルート`CMakeLists.txt`へ明示登録し、自動探索は使用しない。登録対象は基礎ドライバ各ソースとincludeルート`Application/`。CubeMX管理の`cmake/stm32cubemx/CMakeLists.txt`は編集しない。
 
-今回、生成コードと`4WS_MainFW.ioc`の変更はない。CubeMX再生成後もユーザーコードは`Application/`に残り、最新の生成ピン定義を参照する。ピン名が同じでも設定モード・配線が変わる可能性があるため、再生成時はAPIとの整合を確認する。
+ADC/FDCANの初期化定数と`.ioc`を同期して更新した。DMA・NVIC・IRQ入口はBoardが実行時に設定し、CubeMX側には重複登録しない。所有資源と再生成への影響は[基礎ドライバ](drivers.md)に記録する。ユーザーコードは`Application/`に残り、mainとの接続はUSER CODEで保持する。

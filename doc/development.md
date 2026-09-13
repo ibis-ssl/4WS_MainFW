@@ -91,9 +91,28 @@ CubeMXが管理するファイルを直接変更する場合は、再生成で�
 
 ## 検証範囲
 
+基礎ドライバのホスト検証は、Python 3とホスト用Clangを用いて次を実行します。Arm用GCCはこのホスト検証には使用しません。
+
+```powershell
+python ./Script/test_drivers.py
+# コンパイラーの場所を指定する場合
+python ./Script/test_drivers.py --cc "C:/Program Files/LLVM/bin/clang.exe"
+```
+
+実ドライバをHALモックに接続したテストです。対象と限界は[基礎ドライバ](drivers.md)を参照してください。CubeMX再生成時は、同文書のDMA・NVIC・IRQ所有表に従ってBoardとの二重設定を避け、ADC/FDCANの生成初期値との整合も確認します。
+
 ビルド成功はコンパイル、リンク、bin／hex生成までを確認するものです。FDCAN、UART、SPI、I2C、ADC、PWMの電気的動作や接続機器との通信は保証しません。実機確認を行った場合は、基板、接続条件、FW成果物、確認内容を記録してください。
 
 ## 検証記録
+
+### CAN・UART4・ブザー・ADCユーザーSW（2026-09-13）
+
+- Debug／Releaseとも`build.ps1`の`-Rebuild`付きでクリーンビルド成功。
+- 新規の`build/drivers-check/Debug`と`build/drivers-check/Release`でCMake構成からビルド、bin／hex生成まで成功。
+- Debug: Flash 48,080 byte、RAM 9,232 byte。Release: Flash 27,532 byte、RAM 9,224 byte。
+- `python ./Script/test_drivers.py`がClang 17.0.6で成功。CANの満杯・順序・2バス・受信長、UARTのバッファ保持・容量・エラー復帰、ADC有効性、SW境界、全1～20000 Hz、時刻周回、電源形式・片側受理を検証。
+- `.ioc`とADC/FDCAN生成初期値、UART4 baudrate、追加IRQ入口6個の単一定義をソース照合で確認。
+- CubeMX本体による再生成、ST-Link接続・書き込み、実機の波形・通信・ボタン操作は未実施。
 
 ### ユーザーコード配置名の見直し（2026-09-13）
 

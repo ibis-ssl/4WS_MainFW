@@ -29,6 +29,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "App/app.h"
 
 /* USER CODE END Includes */
 
@@ -106,6 +107,8 @@ int main(void)
   MX_TIM3_Init();
   MX_CORDIC_Init();
   /* USER CODE BEGIN 2 */
+  /* 全周辺初期化後に基礎ドライバを開始する。出力操作はAppの明示要求に限定する。 */
+  if (!app_init()) { Error_Handler(); }
 
   /* USER CODE END 2 */
 
@@ -116,6 +119,7 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+    app_process();
   }
   /* USER CODE END 3 */
 }
