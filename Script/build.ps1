@@ -47,14 +47,21 @@ $env:Path = "$toolchainBin;$(Split-Path -Parent $ninja);$oldPath"
 try {
   Push-Location $repoRoot
   try {
+    # CMake cache files treat backslashes as escape characters, so command-line
+    # paths must use forward slashes even when this script runs on Windows.
+    $cmakeNinja = $ninja -replace '\\', '/'
+    $cmakeGcc = $resolvedTools['arm-none-eabi-gcc.exe'] -replace '\\', '/'
+    $cmakeGxx = $resolvedTools['arm-none-eabi-g++.exe'] -replace '\\', '/'
+    $cmakeObjcopy = $resolvedTools['arm-none-eabi-objcopy.exe'] -replace '\\', '/'
+    $cmakeSize = $resolvedTools['arm-none-eabi-size.exe'] -replace '\\', '/'
     $configureArgs = @(
       "--preset", $Configuration,
-      "-DCMAKE_MAKE_PROGRAM=$ninja",
-      "-DCMAKE_C_COMPILER=$($resolvedTools['arm-none-eabi-gcc.exe'])",
-      "-DCMAKE_ASM_COMPILER=$($resolvedTools['arm-none-eabi-gcc.exe'])",
-      "-DCMAKE_CXX_COMPILER=$($resolvedTools['arm-none-eabi-g++.exe'])",
-      "-DCMAKE_OBJCOPY=$($resolvedTools['arm-none-eabi-objcopy.exe'])",
-      "-DCMAKE_SIZE=$($resolvedTools['arm-none-eabi-size.exe'])"
+      "-DCMAKE_MAKE_PROGRAM=$cmakeNinja",
+      "-DCMAKE_C_COMPILER=$cmakeGcc",
+      "-DCMAKE_ASM_COMPILER=$cmakeGcc",
+      "-DCMAKE_CXX_COMPILER=$cmakeGxx",
+      "-DCMAKE_OBJCOPY=$cmakeObjcopy",
+      "-DCMAKE_SIZE=$cmakeSize"
     )
     Invoke-NativeCommand -Executable $cmake -Arguments $configureArgs -FailureMessage "CMake configure failed for $Configuration"
 
