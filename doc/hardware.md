@@ -22,6 +22,8 @@
 
 ADC・PWM・SPI・CANの運用ドライバは未実装です。基板の実機動作確認は未実施です。階層と今後の配置は[コード階層](architecture.md)を参照してください。
 
+CAN、デバッグUART、ブザー、ユーザーSWの同等化方針と実装可能範囲は[ドライバ互換調査](driver_compatibility.md)を参照してください。以降の表は変更前の現行設定です。特にCANは旧Classic CAN仕様への変更方針がありますが、まだ`.ioc`・生成コードには反映していません。
+
 ## MCUとクロック
 
 STM32G474RET6（LQFP64）を使用します。16 MHz HSIをPLLへ入力し、`M=4`、`N=85`、`R=2`でSYSCLKを170 MHzに設定しています。AHB、APB1、APB2はいずれも分周なしです。電源スケールはBoost、Flash latencyは4です。
