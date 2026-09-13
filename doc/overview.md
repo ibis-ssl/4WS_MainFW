@@ -49,6 +49,7 @@ RoboCup SSL用ロボットの4輪ステアリング機体に搭載するメイ�
 | パス | 内容 |
 |---|---|
 | `Core/Inc`、`Core/Src` | CubeMX生成のアプリケーション、初期化、割り込みコード |
+| `Application/` | ユーザーコード。Board / Device / Protocol / Control / Appの配置方針で、現在はBoardのGPIO APIを実装 |
 | `Drivers/` | CMSISとSTM32G4 HALドライバー |
 | `cmake/stm32cubemx/` | CubeMXが管理するソース一覧とビルド設定 |
 | `cmake/` | Arm GCC／STArmClang用ツールチェーン定義 |
@@ -64,6 +65,8 @@ RoboCup SSL用ロボットの4輪ステアリング機体に搭載するメイ�
 `main()`はHALとクロックを初期化し、GPIO、ADC1、FDCAN1/2、I2C1、LPUART1、UART4、SPI1/2、TIM1/2/3、CORDICの初期化関数を呼び出します。その後の`while (1)`には処理がありません。
 
 周辺機能は設定レジスターの初期化までです。変換、送受信、PWM開始、FDCANフィルター／通知など、動作開始に必要なアプリケーション処理は実装されていません。
+
+`Application/Board/board_gpio.c`には、名前付きデジタル入力の生レベル取得とLED端子のレベル設定を実装しています。起動処理からは呼び出しておらず、基板の動作確認は未実施です。[コード階層](architecture.md)に各層の責務、依存方向、旧世代の実装から整理する方針を定義しています。
 
 ## 実装時に決める事項
 

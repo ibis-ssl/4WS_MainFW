@@ -87,13 +87,28 @@ STM32CubeProgrammer CLIまたはSTM32CubeCLTの場所を自動検出できない
 5. DebugとReleaseを`-Rebuild`付きでビルドします。
 6. Git管理下では`git diff`を確認し、意図しない生成差分や設定変更がないか確認します。
 
-CubeMXが管理するファイルを直接変更する場合は、再生成で消える箇所かどうかを確認します。アプリケーションコードは可能な限りUSER CODEブロックまたは追加ファイルへ配置し、追加ファイルはルート`CMakeLists.txt`から登録します。
+CubeMXが管理するファイルを直接変更する場合は、再生成で消える箇所かどうかを確認します。ユーザーコードは[コード階層](architecture.md)に従って`Application/`へ配置し、起動処理などとの接続にはUSER CODEブロックを使用します。追加ファイルはルート`CMakeLists.txt`から登録します。再生成後は`Application/`とそのビルド登録、および生成ピン定義との整合も確認します。
 
 ## 検証範囲
 
 ビルド成功はコンパイル、リンク、bin／hex生成までを確認するものです。FDCAN、UART、SPI、I2C、ADC、PWMの電気的動作や接続機器との通信は保証しません。実機確認を行った場合は、基板、接続条件、FW成果物、確認内容を記録してください。
 
 ## 検証記録
+
+### ユーザーコード配置名の見直し（2026-09-13）
+
+`Application/`への配置変更後、`build.ps1 -Configuration Debug -Rebuild`と`build.ps1 -Configuration Release -Rebuild`が成功しました。新規の`build/application-check/Debug`と`build/application-check/Release`でも構成からビルド、bin／hex生成まで確認しました。ソースの処理内容と生成コード・`.ioc`は変更していません。実機検証は未実施です。
+
+### コード階層・GPIO APIの追加（2026-09-13）
+
+- `build.ps1 -Configuration Debug -Rebuild`と`build.ps1 -Configuration Release -Rebuild`が成功。
+- 新規の`build/architecture-check/Debug`と`build/architecture-check/Release`でもCMake構成からビルド、bin／hex生成まで成功。
+- `board_gpio.c`のコンパイルを両構成で確認。未使用関数はリンク時に除去されるため、使用量はDebugがFlash 24,868 byte、ReleaseがFlash 14,180 byte、RAMは両構成2,744 byteのまま。
+- 新規構成時には、検証コマンドで指定した`CMAKE_SIZE`がプロジェクトで未使用とのCMake警告あり。ビルドは成功。
+- GPIOの有効極性、実端子の入力・出力、LED点灯は未検証。基板への書き込み・接続・動作試験は未実施。
+- CubeMX生成コードと`.ioc`は変更していない。
+
+### 初期プロジェクトの確認
 
 2026-09-13にWindows PowerShell 5.1で次を確認しました。
 

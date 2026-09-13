@@ -6,6 +6,8 @@ ochin-CM4v2にマウントされたCM4とSPIで通信し、機体内部の高速
 
 現時点では各周辺機能を初期化した後、空のメインループへ入ります。ADC取得、FDCAN通信、SPI通信、PWM出力などのアプリケーション処理は未実装です。
 
+ユーザーコードは`Application/`に配置します。最初の基板GPIO APIとして入力の生レベル取得とLED端子のレベル設定を実装しました。起動処理には未接続で、基板の実機動作は未検証です。今後のドライバと制御コードの配置は[コード階層](doc/architecture.md)に従います。
+
 ## クイックスタート
 
 Windows PowerShellでプロジェクトルートから実行します。
@@ -21,6 +23,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./Script/build.ps1 -Configur
 | 文書 | 内容 |
 |---|---|
 | [概要](doc/overview.md) | ボードの役割、動作モード、旧世代の参照先、現在の実装状況 |
+| [コード階層](doc/architecture.md) | 責務・依存方向、旧世代からの整理、ドライバ実装方針 |
 | [ハードウェア](doc/hardware.md) | 周辺HWの定義とMCU、クロック、ピン、周辺機能の現行設定 |
 | [開発手順](doc/development.md) | ビルド、成果物、書き込み、CubeMX再生成 |
 
