@@ -105,6 +105,15 @@ python ./Script/test_drivers.py --cc "C:/Program Files/LLVM/bin/clang.exe"
 
 ## 検証記録
 
+### 500 Hz制御IRQ・10 Hzデバッグ出力（2026-09-14）
+
+- Debug／Releaseの`build.ps1 -Configuration <構成> -Rebuild`が成功。新規の`build/control-loop-check/Debug`、`build/control-loop-check/Release`でも構成・ビルド成功。
+- Debug: Flash 49,632 byte、RAM 9,344 byte。Release: Flash 28,456 byte、RAM 9,344 byte。
+- `python ./Script/test_drivers.py`成功。既存ドライバ試験に加え、TIM6のPSC=169・ARR=1999、IRQ優先度、周期超過計数、BASEPRIの入れ子復元を確認。
+- mainを停止した状態での制御入口実行、1秒で制御500回・ログ10回、IRQからの`p()`拒否、UART busy／main遅延時の追い掛け出力抑止、ms時刻周回をHALモックで確認。
+- ADC公開途中の制御割り込みを模擬し、完成済みバッファだけを読むことを確認。
+- 生成コードと`.ioc`は変更せず、TIM6・DWT・NVICはBoardが実行時に設定。実機の500 Hz波形・最悪実行時間・ジッターは未測定、書き込み未実施。
+
 ### CAN・UART4・ブザー・ADCユーザーSW（2026-09-13）
 
 - Debug／Releaseとも`build.ps1`の`-Rebuild`付きでクリーンビルド成功。

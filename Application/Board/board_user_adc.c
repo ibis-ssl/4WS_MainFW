@@ -9,7 +9,8 @@
 #include <stddef.h>
 static DMA_HandleTypeDef adc_dma;
 static volatile uint16_t samples[32];
-static board_user_adc_sample_t latest;
+static board_user_adc_sample_t latest[2];
+static volatile uint32_t published;
 static bool initialized;
 static volatile bool valid;
 static volatile uint32_t errors;
@@ -45,8 +46,10 @@ bool board_user_adc_read(board_user_adc_sample_t *sample)
 {
     if (sample == NULL) { return false; }
     uint32_t lock = board_critical_enter();
-    bool ready = valid && (uint32_t)(HAL_GetTick() - latest.sampled_ms) <= 100U;
-    if (ready) { *sample = latest; }
+    uint32_t index = published;
+    __DMB();
+    bool ready = valid && (uint32_t)(HAL_GetTick() - latest[index].sampled_ms) <= 100U;
+    if (ready) { *sample = latest[index]; }
     board_critical_exit(lock);
     return ready;
 }
@@ -54,8 +57,12 @@ uint32_t board_user_adc_error_count(void) { return errors; }
 static void publish(unsigned int index)
 {
     if (errors != 0U) { return; }
-    latest.raw = samples[index];
-    latest.sampled_ms = HAL_GetTick();
+    /* 優先度2の制御IRQに書込み途中を見せないよう、非公開側へ完成させてから切り替える。 */
+    uint32_t target = published ^ 1U;
+    latest[target].raw = samples[index];
+    latest[target].sampled_ms = HAL_GetTick();
+    __DMB();
+    published = target;
     valid = true;
 }
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *handle) { if (handle == &hadc1) { publish(15); } }

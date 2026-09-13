@@ -64,9 +64,11 @@ bool board_debug_uart_write(const void *data, size_t length)
     }
     return true;
 }
-bool board_debug_uart_printf(const char *format, ...)
+bool p(const char *format, ...)
 {
-    if (format == NULL) { stats.tx_rejected++; return false; }
+    /* 制御IRQから誤って呼んでも重い整形処理へ入らない。 */
+    if (__get_IPSR() != 0U) { return false; }
+    if (format == NULL || !board_debug_uart_ready()) { stats.tx_rejected++; return false; }
     va_list args;
     va_start(args, format);
     int length = vsnprintf(format_buffer, sizeof(format_buffer), format, args);

@@ -11,7 +11,7 @@ bool board_debug_uart_ready(void);
 /* 最大2000 byteを内部へコピー。busy・過大・無効引数ではfalse、部分送信しない。 */
 bool board_debug_uart_write(const void *data, size_t length);
 /* 容量超過は切り詰めて送信せずfalseを返す。浮動小数点の表示対応はビルド設定に従う。 */
-bool board_debug_uart_printf(const char *format, ...);
+bool p(const char *format, ...);
 bool board_debug_uart_read(uint8_t *byte);
 void board_debug_uart_get_stats(board_debug_uart_stats_t *stats);
 #endif

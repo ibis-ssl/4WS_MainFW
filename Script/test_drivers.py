@@ -24,9 +24,11 @@ sources = [
     'Application/Board/board_time.c', 'Application/Device/buzzer.c',
     'Application/Device/user_switch.c', 'Application/Device/user_switch_board.c',
     'Application/Protocol/power_packet.c', 'Application/Device/power_board.c',
+    'Application/Board/board_control_timer.c', 'Application/App/app_control.c', 'Application/App/app.c',
 ]
 exe = out / 'test_drivers.exe'
 subprocess.run([compiler, '-std=c11', '-Wall', '-Wextra', '-Werror',
     '-I', str(root / 'Tests/mocks'), '-I', str(root / 'Application'),
     *[str(root / source) for source in sources], '-o', str(exe)], check=True, cwd=out)
 subprocess.run([str(exe)], check=True, cwd=out)
+subprocess.run([str(exe), 'app'], check=True, cwd=out)

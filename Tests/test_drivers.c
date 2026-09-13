@@ -11,17 +11,28 @@
 #include "Device/buzzer.h"
 #include "Device/user_switch.h"
 #include "Device/power_board.h"
+#include "App/app.h"
+#include "App/app_control.h"
+#include "Board/board_control_timer.h"
+#include "Board/board_critical.h"
 #include <assert.h>
 #include <math.h>
 #include <stdio.h>
 #include <string.h>
 
 uint32_t mock_primask, mock_tick;
+uint32_t mock_basepri, mock_ipsr;
+void (*mock_dmb_hook)(void);
+TIM_TypeDef mock_tim6;
+mock_core_debug_t mock_core_debug;
+mock_dwt_t mock_dwt;
+static uint32_t irq_priorities[7], uart_transfers;
+void TIM6_DAC_IRQHandler(void);
 FDCAN_HandleTypeDef hfdcan1 = {0}, hfdcan2 = {1};
 UART_HandleTypeDef huart4;
 ADC_HandleTypeDef hadc1;
 static TIM_TypeDef timer;
-TIM_HandleTypeDef htim1 = {&timer};
+TIM_HandleTypeDef htim1 = {.Instance=&timer};
 static unsigned int can_free[2], can_sent_count[2], rx_count[2], rx_position[2];
 static bool fail_can_tx, fail_uart_tx, fail_uart_rx, fail_start;
 static board_can_frame_t sent[2][256], incoming[2][64];
@@ -32,7 +43,7 @@ static uint16_t uart_tx_length;
 static uint16_t *adc_values;
 static uint32_t apb_divider = 1, pclk2 = 170000000;
 uint32_t HAL_GetTick(void) { return mock_tick; }
-void HAL_NVIC_SetPriority(IRQn_Type irq, uint32_t a, uint32_t b) { (void)irq; (void)a; (void)b; }
+void HAL_NVIC_SetPriority(IRQn_Type irq, uint32_t a, uint32_t b) { irq_priorities[irq]=a; (void)b; }
 void HAL_NVIC_EnableIRQ(IRQn_Type irq) { (void)irq; }
 void HAL_NVIC_DisableIRQ(IRQn_Type irq) { (void)irq; }
 void HAL_NVIC_ClearPendingIRQ(IRQn_Type irq) { (void)irq; }
@@ -71,7 +82,7 @@ void HAL_DMA_IRQHandler(DMA_HandleTypeDef *h) { (void)h; }
 HAL_StatusTypeDef HAL_UART_Receive_IT(UART_HandleTypeDef *h, uint8_t *data, uint16_t length)
 { assert(h == &huart4 && length == 1); uart_rx=data; h->ErrorCode=0; return fail_uart_rx ? HAL_ERROR : HAL_OK; }
 HAL_StatusTypeDef HAL_UART_Transmit_DMA(UART_HandleTypeDef *h, uint8_t *data, uint16_t length)
-{ assert(h == &huart4); uart_tx=data; uart_tx_length=length; return fail_uart_tx ? HAL_ERROR : HAL_OK; }
+{ assert(h == &huart4); uart_tx=data; uart_tx_length=length; if (!fail_uart_tx) { uart_transfers++; } return fail_uart_tx ? HAL_ERROR : HAL_OK; }
 HAL_StatusTypeDef HAL_UART_AbortTransmit(UART_HandleTypeDef *h) { (void)h; return HAL_OK; }
 HAL_StatusTypeDef HAL_UART_AbortReceive(UART_HandleTypeDef *h) { h->ErrorCode=0; return HAL_OK; }
 void HAL_UART_IRQHandler(UART_HandleTypeDef *h) { (void)h; }
@@ -81,8 +92,13 @@ HAL_StatusTypeDef HAL_ADC_Start_DMA(ADC_HandleTypeDef *h, uint32_t *data, uint32
 void HAL_ADC_IRQHandler(ADC_HandleTypeDef *h) { (void)h; }
 HAL_StatusTypeDef HAL_TIM_PWM_Start(TIM_HandleTypeDef *h, uint32_t channel) { (void)h; (void)channel; return HAL_OK; }
 HAL_StatusTypeDef HAL_TIM_PWM_Stop(TIM_HandleTypeDef *h, uint32_t channel) { (void)h; (void)channel; return HAL_OK; }
-void HAL_RCC_GetClockConfig(RCC_ClkInitTypeDef *c, uint32_t *latency) { c->APB2CLKDivider=apb_divider; *latency=4; }
+void HAL_RCC_GetClockConfig(RCC_ClkInitTypeDef *c, uint32_t *latency) { c->APB2CLKDivider=apb_divider; c->APB1CLKDivider=1; *latency=4; }
 uint32_t HAL_RCC_GetPCLK2Freq(void) { return pclk2; }
+uint32_t HAL_RCC_GetPCLK1Freq(void) { return 170000000; }
+uint32_t HAL_RCC_GetHCLKFreq(void) { return 170000000; }
+HAL_StatusTypeDef HAL_TIM_Base_Init(TIM_HandleTypeDef *h)
+{ h->Instance->PSC=h->Init.Prescaler; h->Instance->ARR=h->Init.Period; h->Instance->SR=TIM_FLAG_UPDATE; return HAL_OK; }
+HAL_StatusTypeDef HAL_TIM_Base_Start_IT(TIM_HandleTypeDef *h) { h->Instance->DIER=TIM_IT_UPDATE; return HAL_OK; }
 
 static void test_can(void)
 {
@@ -126,12 +142,12 @@ static void test_uart(void)
     uint8_t text[]={1,2,3};
     assert(board_debug_uart_write(text,3)); text[0]=9;
     assert(uart_tx[0]==1 && uart_tx_length==3);
-    assert(!board_debug_uart_printf("overwrite")); assert(uart_tx[0]==1);
+    assert(!p("overwrite")); assert(uart_tx[0]==1);
     HAL_UART_TxCpltCallback(&huart4);
     char huge[2002]; memset(huge,'x',sizeof(huge)); huge[2001]=0;
-    assert(!board_debug_uart_printf("%s",huge));
+    assert(!p("%s",huge));
     assert(!board_debug_uart_write(huge,2001)); assert(!board_debug_uart_write(NULL,1));
-    assert(board_debug_uart_printf("%s:%u","ok",42)); assert(uart_tx_length==5 && memcmp(uart_tx,"ok:42",5)==0);
+    assert(p("%s:%u","ok",42)); assert(uart_tx_length==5 && memcmp(uart_tx,"ok:42",5)==0);
     huart4.ErrorCode=HAL_UART_ERROR_DMA; HAL_UART_ErrorCallback(&huart4);
     assert(!board_debug_uart_write(text,3)); board_debug_uart_process();
     fail_uart_tx=true; assert(!board_debug_uart_write(text,3)); fail_uart_tx=false;
@@ -209,8 +225,71 @@ static void test_power(void)
     assert(power_board_set_on(true)==2);
     unsigned int count=can_sent_count[1]; assert(sent[1][count-1].id==0x010 && memcmp(sent[1][count-1].data,on,8)==0);
 }
-int main(void)
+static void test_control_callback(void) { mock_dwt.CYCCNT += 340001U; mock_tim6.SR |= TIM_FLAG_UPDATE; }
+static void test_control_timer(void)
 {
+    assert(!board_control_timer_start(0,test_control_callback));
+    assert(!board_control_timer_start(333,test_control_callback));
+    assert(board_control_timer_start(500,test_control_callback));
+    assert(mock_tim6.PSC==169 && mock_tim6.ARR==1999 && mock_tim6.SR==0);
+    assert(irq_priorities[TIM6_DAC_IRQn] < irq_priorities[UART4_IRQn]);
+    uint32_t lock=board_critical_enter();
+    assert(mock_primask==0 && mock_basepri==(5U << 4));
+    uint32_t nested=board_critical_enter(); board_critical_exit(nested); assert(mock_basepri==(5U << 4));
+    /* 制御優先度2はBASEPRIの禁止対象に入らない。 */
+    assert((irq_priorities[TIM6_DAC_IRQn] << 4) < mock_basepri);
+    mock_tim6.SR=TIM_FLAG_UPDATE; mock_tim6.CNT=3;
+    TIM6_DAC_IRQHandler(); board_critical_exit(lock);
+    board_control_timer_stats_t s; board_control_timer_get_stats(&s);
+    assert(s.calls==1 && s.overruns==1 && s.max_execution_cycles==340001 && s.max_entry_delay_us==3);
+    assert(mock_basepri==0 && mock_tim6.SR==0);
+}
+static void interrupt_adc_publish(void)
+{
+    app_control_step();
+    assert(app_control_user_switch()==USER_SWITCH_RIGHT);
+}
+static void test_app_periodic(void)
+{
+    assert(app_init());
+    assert(uart_transfers==0);
+    adc_values[15]=501; HAL_ADC_ConvHalfCpltCallback(&hadc1);
+    mock_dmb_hook=interrupt_adc_publish;
+    adc_values[15]=3001; HAL_ADC_ConvHalfCpltCallback(&hadc1);
+    app_control_step(); assert(app_control_user_switch()==USER_SWITCH_LEFT);
+    for (uint32_t t=1;t<=1000;++t) {
+        mock_tick=t;
+        if (t%2U==0) { mock_ipsr=1; mock_tim6.SR=TIM_FLAG_UPDATE; TIM6_DAC_IRQHandler(); mock_ipsr=0; }
+        app_process();
+        if (t%100U==0) { assert(uart_transfers==t/100U); HAL_UART_TxCpltCallback(&huart4); }
+    }
+    board_control_timer_stats_t s; board_control_timer_get_stats(&s); assert(s.calls==500);
+    /* mainを停止しても制御IRQの入力取込みと実行回数は進む。 */
+    adc_values[15]=3001; HAL_ADC_ConvHalfCpltCallback(&hadc1);
+    mock_tim6.SR=TIM_FLAG_UPDATE; TIM6_DAC_IRQHandler();
+    assert(app_control_user_switch()==USER_SWITCH_LEFT);
+    assert(uart_transfers==10);
+    mock_ipsr=1; assert(!p("IRQ forbidden")); mock_ipsr=0; assert(uart_transfers==10);
+    mock_tick=1450; app_process(); assert(uart_transfers==11);
+    app_process(); assert(uart_transfers==11); HAL_UART_TxCpltCallback(&huart4);
+    mock_tick=1499; app_process(); assert(uart_transfers==11);
+    mock_tick=1500; app_process(); assert(uart_transfers==12);
+    mock_tick=1600; app_process(); assert(uart_transfers==12);
+    HAL_UART_TxCpltCallback(&huart4); mock_tick=1699; app_process(); assert(uart_transfers==12);
+    mock_tick=1700; app_process(); assert(uart_transfers==13);
+    HAL_UART_TxCpltCallback(&huart4);
+    mock_tick=UINT32_MAX-50U; app_process(); assert(uart_transfers==14);
+    HAL_UART_TxCpltCallback(&huart4);
+    mock_tick=3; app_process(); assert(uart_transfers==14);
+    mock_tick=4; app_process(); assert(uart_transfers==15);
+    HAL_UART_TxCpltCallback(&huart4);
+    mock_tick=103; app_process(); assert(uart_transfers==15);
+    mock_tick=104; app_process(); assert(uart_transfers==16);
+}
+int main(int argc, char **argv)
+{
+    if (argc>1 && strcmp(argv[1],"app")==0) { test_app_periodic(); puts("PASS: 500 Hz ISR and 10 Hz main logging"); return 0; }
     test_can(); test_uart(); test_adc_switch(); test_buzzer(); test_power();
+    test_control_timer();
     assert(mock_primask==0); puts("PASS: CAN/UART/ADC/SW/PWM/power driver tests"); return 0;
 }

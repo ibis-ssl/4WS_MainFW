@@ -5,12 +5,21 @@
 #include <stddef.h>
 typedef enum { HAL_OK, HAL_ERROR, HAL_BUSY } HAL_StatusTypeDef;
 typedef int IRQn_Type;
-enum { FDCAN1_IT0_IRQn, FDCAN2_IT0_IRQn, DMA1_Channel1_IRQn, DMA1_Channel2_IRQn, ADC1_2_IRQn, UART4_IRQn };
+enum { FDCAN1_IT0_IRQn, FDCAN2_IT0_IRQn, DMA1_Channel1_IRQn, DMA1_Channel2_IRQn, ADC1_2_IRQn, UART4_IRQn, TIM6_DAC_IRQn };
 extern uint32_t mock_primask, mock_tick;
+extern uint32_t mock_basepri, mock_ipsr;
+#define __NVIC_PRIO_BITS 4U
+static inline uint32_t __get_BASEPRI(void) { return mock_basepri; }
+static inline void __set_BASEPRI(uint32_t value) { mock_basepri = value; }
+static inline void __set_BASEPRI_MAX(uint32_t value) { if (!mock_basepri || value < mock_basepri) { mock_basepri = value; } }
+static inline uint32_t __get_IPSR(void) { return mock_ipsr; }
+static inline void __DSB(void) { }
+static inline void __ISB(void) { }
 static inline uint32_t __get_PRIMASK(void) { return mock_primask; }
 static inline void __disable_irq(void) { mock_primask = 1; }
 static inline void __set_PRIMASK(uint32_t value) { mock_primask = value; }
-static inline void __DMB(void) { }
+extern void (*mock_dmb_hook)(void);
+static inline void __DMB(void) { if (mock_dmb_hook) { void (*hook)(void)=mock_dmb_hook; mock_dmb_hook=NULL; hook(); } }
 uint32_t HAL_GetTick(void);
 void HAL_NVIC_SetPriority(IRQn_Type irq, uint32_t a, uint32_t b);
 void HAL_NVIC_EnableIRQ(IRQn_Type irq);
@@ -105,10 +114,26 @@ void HAL_ADC_IRQHandler(ADC_HandleTypeDef *);
 void HAL_ADC_ConvHalfCpltCallback(ADC_HandleTypeDef *);
 void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *);
 void HAL_ADC_ErrorCallback(ADC_HandleTypeDef *);
-typedef struct { uint32_t PSC, ARR, CCR1, CNT, EGR; } TIM_TypeDef;
-typedef struct { TIM_TypeDef *Instance; } TIM_HandleTypeDef;
+typedef struct { uint32_t PSC, ARR, CCR1, CNT, EGR, SR, DIER; } TIM_TypeDef;
+typedef struct { uint32_t Prescaler, CounterMode, Period, AutoReloadPreload; } TIM_Base_InitTypeDef;
+typedef struct { TIM_TypeDef *Instance; TIM_Base_InitTypeDef Init; } TIM_HandleTypeDef;
 extern TIM_HandleTypeDef htim1;
-typedef struct { uint32_t APB2CLKDivider; } RCC_ClkInitTypeDef;
+extern TIM_TypeDef mock_tim6;
+#define TIM6 (&mock_tim6)
+#define __HAL_RCC_TIM6_CLK_ENABLE() ((void)0)
+#define TIM_COUNTERMODE_UP 0U
+#define TIM_AUTORELOAD_PRELOAD_DISABLE 0U
+#define RESET 0U
+#define TIM_IT_UPDATE 1U
+typedef struct { uint32_t APB2CLKDivider, APB1CLKDivider; } RCC_ClkInitTypeDef;
+typedef struct { uint32_t DEMCR; } mock_core_debug_t;
+typedef struct { uint32_t CTRL, CYCCNT; } mock_dwt_t;
+extern mock_core_debug_t mock_core_debug;
+extern mock_dwt_t mock_dwt;
+#define CoreDebug (&mock_core_debug)
+#define DWT (&mock_dwt)
+#define CoreDebug_DEMCR_TRCENA_Msk 1U
+#define DWT_CTRL_CYCCNTENA_Msk 1U
 #define RCC_HCLK_DIV1 1U
 #define TIM_CHANNEL_1 0U
 #define TIM_EGR_UG 1U
@@ -117,9 +142,16 @@ typedef struct { uint32_t APB2CLKDivider; } RCC_ClkInitTypeDef;
 #define __HAL_TIM_SET_PRESCALER(h, value) ((h)->Instance->PSC = (value))
 #define __HAL_TIM_SET_AUTORELOAD(h, value) ((h)->Instance->ARR = (value))
 #define __HAL_TIM_SET_COUNTER(h, value) ((h)->Instance->CNT = (value))
-#define __HAL_TIM_CLEAR_FLAG(h, value) ((void)(h), (void)(value))
+#define __HAL_TIM_CLEAR_FLAG(h, value) ((h)->Instance->SR &= ~(value))
+#define __HAL_TIM_GET_FLAG(h, value) ((h)->Instance->SR & (value))
+#define __HAL_TIM_GET_IT_SOURCE(h, value) ((h)->Instance->DIER & (value))
+#define __HAL_TIM_GET_COUNTER(h) ((h)->Instance->CNT)
+HAL_StatusTypeDef HAL_TIM_Base_Init(TIM_HandleTypeDef *);
+HAL_StatusTypeDef HAL_TIM_Base_Start_IT(TIM_HandleTypeDef *);
 HAL_StatusTypeDef HAL_TIM_PWM_Start(TIM_HandleTypeDef *, uint32_t);
 HAL_StatusTypeDef HAL_TIM_PWM_Stop(TIM_HandleTypeDef *, uint32_t);
 void HAL_RCC_GetClockConfig(RCC_ClkInitTypeDef *, uint32_t *);
 uint32_t HAL_RCC_GetPCLK2Freq(void);
+uint32_t HAL_RCC_GetPCLK1Freq(void);
+uint32_t HAL_RCC_GetHCLKFreq(void);
 #endif
