@@ -38,10 +38,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./Script/build.ps1 `
 
 | 成果物 | 用途 |
 |---|---|
-| `build/<Configuration>/mother_4steer.elf` | デバッグ情報を含む実行イメージ |
-| `build/<Configuration>/mother_4steer.bin` | バイナリー書き込み用イメージ |
-| `build/<Configuration>/mother_4steer.hex` | Intel HEX書き込み用イメージ |
-| `build/<Configuration>/mother_4steer.map` | セクション配置とサイズの確認 |
+| `build/<Configuration>/4WS_MainFW.elf` | デバッグ情報を含む実行イメージ |
+| `build/<Configuration>/4WS_MainFW.bin` | バイナリー書き込み用イメージ |
+| `build/<Configuration>/4WS_MainFW.hex` | Intel HEX書き込み用イメージ |
+| `build/<Configuration>/4WS_MainFW.map` | セクション配置とサイズの確認 |
 | `build/<Configuration>/compile_commands.json` | エディターや静的解析用コンパイル情報 |
 
 ## ST-Link書き込み
@@ -70,17 +70,17 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./Script/build_and_flash.ps1
 
 STM32CubeProgrammer CLIまたはSTM32CubeCLTの場所を自動検出できない場合は`-ProgrammerPath`または`-CubeCLTPath`で指定します。接続だけを確認する場合は`-ConnectOnly`、実行コマンドを表示して書き込まない場合は`-DryRun`、書き込み後のリセットを省く場合は`-NoReset`を指定します。既定では書き込み後に照合し、`-NoVerify`で照合を省略できます。`build_and_flash.ps1 -DryRun`はビルドを実行した後、書き込みコマンドだけを表示します。
 
-このプロジェクトは単一アプリケーションをFlash先頭`0x08000000`へ配置します。`flash.ps1`は`mother_4steer.elf`を書き込み対象とします。実機書き込みは接続先と構成を確認してから実行してください。
+このプロジェクトは単一アプリケーションをFlash先頭`0x08000000`へ配置します。`flash.ps1`は`4WS_MainFW.elf`を書き込み対象とします。実機書き込みは接続先と構成を確認してから実行してください。
 
 ## VS Code
 
 `.vscode/tasks.json`には`Build: Debug`、`Build: Release`、`Build: Rebuild Debug`、`Flash: Build and Flash Debug`、`Flash: Dry Run Debug`、`Flash: List ST-LINK Probes`があります。タスクは`Script/`のPowerShellスクリプトを呼び出すため、コマンドラインと同じ手順になります。
 
-デバッグにはVS CodeのCortex-Debug拡張を使用します。`STM32G474: Build & Debug (ST-LINK)`はDebugビルド後に起動し、`STM32G474: Attach (ST-LINK)`は実行中のターゲットへ接続します。どちらもST-Linkと`build/Debug/mother_4steer.elf`を使用します。`.vscode/settings.json`の`STM32VSCodeExtension.cubeCLT.path`は、実際にインストールしたSTM32CubeCLTのルートへ変更してください。
+デバッグにはVS CodeのCortex-Debug拡張を使用します。`STM32G474: Build & Debug (ST-LINK)`はDebugビルド後に起動し、`STM32G474: Attach (ST-LINK)`は実行中のターゲットへ接続します。どちらもST-Linkと`build/Debug/4WS_MainFW.elf`を使用します。`.vscode/settings.json`の`STM32VSCodeExtension.cubeCLT.path`は、実際にインストールしたSTM32CubeCLTのルートへ変更してください。
 
 ## CubeMXで再生成する場合
 
-1. `mother_4steer.ioc`をSTM32CubeMXで開きます。
+1. `4WS_MainFW.ioc`をSTM32CubeMXで開きます。
 2. Toolchain/IDEがCMakeであることを確認してコードを生成します。
 3. `USER CODE BEGIN`／`USER CODE END`内のユーザーコードが保持されたことを確認します。
 4. ルート`CMakeLists.txt`のbin／hex生成設定と、`Script/`、`doc/`、`.vscode/`が保持されたことを確認します。

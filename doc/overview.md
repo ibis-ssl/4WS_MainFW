@@ -4,8 +4,8 @@
 
 | 項目 | 現在の設定 |
 |---|---|
-| CubeMXプロジェクト | `mother_4steer.ioc` |
-| CMakeターゲット／成果物名 | `mother_4steer` |
+| CubeMXプロジェクト | `4WS_MainFW.ioc` |
+| CMakeターゲット／成果物名 | `4WS_MainFW` |
 | MCU | STM32G474RET6、LQFP64 |
 | CPU | Arm Cortex-M4F |
 | システムクロック | 170 MHz |

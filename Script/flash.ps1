@@ -32,7 +32,7 @@ if ($List) {
   if ($Serial) { $arguments += "sn=$Serial" }
 
   if (-not $ConnectOnly) {
-    $firmware = Join-Path $repoRoot "build\$Configuration\mother_4steer.elf"
+    $firmware = Join-Path $repoRoot "build\$Configuration\4WS_MainFW.elf"
     if (-not (Test-Path -LiteralPath $firmware -PathType Leaf)) {
       throw "Firmware not found: $firmware. Run build.ps1 first."
     }
