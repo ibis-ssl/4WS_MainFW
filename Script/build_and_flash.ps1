@@ -8,6 +8,8 @@ param(
   [string]$ProgrammerPath = "",
   [string]$CubeCLTPath = "",
   [string]$Serial = "",
+  [ValidateRange(100, 24000)]
+  [int]$Frequency = 1000,
   [switch]$Rebuild,
   [switch]$NoVerify,
   [switch]$NoReset,
@@ -37,6 +39,7 @@ $flashArgs = @{
   ProgrammerPath = $ProgrammerPath
   CubeCLTPath = $CubeCLTPath
   Serial = $Serial
+  Frequency = $Frequency
   NoVerify = $NoVerify
   NoReset = $NoReset
   DryRun = $DryRun

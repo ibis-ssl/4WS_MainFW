@@ -74,6 +74,8 @@ STM32CubeProgrammer CLIまたはSTM32CubeCLTの場所を自動検出できない
 
 ## VS Code
 
+`flash.ps1`と`build_and_flash.ps1`は`-Frequency`でSWD速度をkHz指定できます。既定は実機確認した1000 kHz、引数範囲は100～24000で、プローブが対応する速度へ調整される場合があります。
+
 `.vscode/tasks.json`には`Build: Debug`、`Build: Release`、`Build: Rebuild Debug`、`Flash: Build and Flash Debug`、`Flash: Dry Run Debug`、`Flash: List ST-LINK Probes`があります。タスクは`Script/`のPowerShellスクリプトを呼び出すため、コマンドラインと同じ手順になります。
 
 デバッグにはVS CodeのCortex-Debug拡張を使用します。`STM32G474: Build & Debug (ST-LINK)`はDebugビルド後に起動し、`STM32G474: Attach (ST-LINK)`は実行中のターゲットへ接続します。どちらもST-Linkと`build/Debug/4WS_MainFW.elf`を使用します。`.vscode/settings.json`の`STM32VSCodeExtension.cubeCLT.path`は、実際にインストールしたSTM32CubeCLTのルートへ変更してください。
@@ -104,6 +106,48 @@ python ./Script/test_drivers.py --cc "C:/Program Files/LLVM/bin/clang.exe"
 ビルド成功はコンパイル、リンク、bin／hex生成までを確認するものです。FDCAN、UART、SPI、I2C、ADC、PWMの電気的動作や接続機器との通信は保証しません。実機確認を行った場合は、基板、接続条件、FW成果物、確認内容を記録してください。
 
 ## 検証記録
+
+### LCD I2C SCLをPA15へ修正（2026-10-08）
+
+- ユーザー提示の回路図・基板対応に従い、LCD用J18-3のSCLをPB8からPA15へ修正。`.ioc`のピン一覧とI2C1_SCL割当、`Core/Src/i2c.c`のGPIOAクロック有効化・AF4初期化・解除を同期した。SDAはPB7を維持。Boardの内部プルアップもPB7/PA15へ変更。
+- `.ioc`と生成コードのピン割当は一致。生成部分の直接変更なのでCubeMX再生成時にPA15 SCL・PB7 SDAが出力されることを確認する。CubeMX本体の再生成は未実施。内部プルアップと約20 kHzは引き続きBoardで実行時に適用する。
+- Debug／Releaseビルド、既存HALモック試験成功。Debug Flash 59,900 byte、Release Flash 34,908 byte、RAMは両構成12,784 byte。
+- ST-Link SN `002D00373033510635393935`、SWD 1 MHzでDebug FWを書込み・照合・リセット成功。GPIOA AFRHのPA15=AF4、PA15の内部プルアップ、GPIOB PB7=AF4・内部プルアップを実機レジスターで確認。PB8はI2Cから解放した。
+- `build/hardware/oled-pa15-1.json`で起動後5,822 msにOLEDアドレス0x3C、ready=1、完成フレーム9、エラー0を確認。IMU valid=1・エラー0、制御周期超過0。ACK・転送完了を確認したもので、画面の見え方とI2C波形・立上り時間は未検証。
+- `build/hardware/oled-pa15-2.json`でも起動後70,725 msに完成フレーム115・エラー0を確認。IMU取得16,409回・エラー0、制御周期超過0で、表示転送中も動作が継続した。
+- 過去のPB8でのLow/BUSY観測は、誤ったSCL割当での結果であり、J18側のSCL状態を示さない。PA15へ修正した構成ではOLEDの疎通が成立した。
+
+### 起動LEDシーケンス（2026-10-08）
+
+- ユーザー指定でLED_0/1/2/3/R/G/BはすべてHigh点灯。Appに1個ずつ各200 ms、0→1→2→3→R→G→B→全消灯の起動表示を追加した。mainの経過時刻判定で進め、HAL_Delayは使用しない。
+- Debug／Releaseビルドと既存HALモック試験成功。LEDの試験側はGPIO APIの呼出しを受理する代替で、点灯の電気的検証は含まない。
+- Debug: Flash 59,844 byte、RAM 12,784 byte。Release: Flash 34,864 byte、RAM 12,784 byte。
+- ST-Link SN `002D00373033510635393935`、SWD 1 MHzでDebug FWを書込み・照合・リセット成功。
+- CPUを停止せずGPIOA/B/CのODRをSWDで取得し、起動後約85/247/413/660/854/1032/1210 msで0/1/2/3/R/G/BのHigh出力を観測、約1453 msで全LED出力Lowを確認。観測時刻には読取り間隔と通信遅延を含む。`build/hardware/led-sequence.json`に保存。
+- 実GPIOの出力順を確認したもので、LEDの光学的な点灯・明るさ・厳密な200 ms波形は別途確認する。生成コード・`.ioc`は変更していない。
+
+### 内部プルアップでのOLED疎通確認（2026-10-08）
+
+- ユーザーからCANトランシーバーのVIO誤配線により現状使用不可と確認。CANダミー受信の実機検証はVIO修正後とする。
+- 外部I2Cプルアップ未実装との指定に基づき、BoardでPB7/PB8の内部プルアップと約20 kHzの低速設定を適用。生成コード・`.ioc`の初期値は変更せず、実行時設定の差分を[CAN・IMU・OLED](peripherals.md)へ記載。
+- OLEDの画面データを8 byte単位へ変更し、初期コマンドを含む低速転送に合わせてタイムアウトを25 msへ変更。HALモック試験成功、Debug／Releaseビルド成功。Debug Flash 59,468 byte、Release Flash 34,632 byte、RAMは両構成12,776 byte。
+- 同じST-Link・対象MCUにDebug FWを書込み・照合・リセット成功。GPIOB PUPDR=0x00014100（PB7/PB8ともpull-up）、I2C1 TIMINGR=0xF0F1FFFFを実機読取りで確認。
+- `build/hardware/oled-pullup-1.json`、`oled-pullup-2.json`に診断値を保存。uptime 6,404→45,204 msでIMU取得数3,042→22,146、IMUエラー0、制御周期超過0。OLEDは0x3C/3D未検出、完成フレーム0、初期化失敗7→46。内部プルアップだけでは今回の疎通は成立しなかった。
+- 切り分けのためSWDでCPU停止、I2C1のPEを解除し、PB7/PB8を一時的に入力へ変更。内部プルアップを保持した状態でGPIOB IDR=0x000014FF、PB7 SDAはHigh、PB8 SCLはLowを確認。MODERとI2C1 CR1を元に戻してCPUを再開した。SCL側の負荷・プルダウン・配線の原因は未確定。OLED表示、I2C波形と立上り時間は未確認。
+
+### Orion CAN受信・ICM-20602・SH1106（2026-10-08）
+
+- Debug／Releaseの`build.ps1 -Configuration <構成> -Rebuild`成功。新規`build/peripherals-check/Debug`、`build/peripherals-check/Release`でも構成からビルド・bin/hex生成まで確認。
+- Debug: Flash 59,264 byte、RAM 12,776 byte。Release: Flash 34,500 byte、RAM 12,776 byte。
+- `python ./Script/test_drivers.py`成功。旧試験と制御IRQ／ログ周期試験に加え、Orion形式の長さ・NaN/Inf・符号・バス分離・受信鮮度・ms周回、IMUの識別・設定読戻し失敗・再試行・換算・取得停止、OLEDの0x3C/3D検出・ページと列位置・描画範囲・転送中のバッファ保護・転送失敗をHALモックで確認。
+- 対象: STLINK-V3MINIE、SN `002D00373033510635393935`、FW V3J17M11、MCU ID 0x469、STM32G47x/G48x/G414、Flash 512 KB、電圧3.26～3.27 V。ユーザー接続情報はOrion相当CANダミー、旧Orionと同じIMU、SH1106 128x64 OLED。
+- 最初のFlash消去が失敗し、ST-Link USBエラーが発生。USB再接続後、SWD 1 MHzで`build/Debug/4WS_MainFW.elf`の書込み・照合・リセット成功。現在の書込みスクリプトのSWD既定値を1000 kHzにした。
+- `read_monitor.py`でCPUを短時間停止して診断RAMを取得し、その都度再開。`build/hardware/monitor-1.json`、`monitor-2.json`へ保存。uptime 4,104→43,404 ms、IMU WHO_AM_I=0x12、valid=1、取得数1,923→21,332、エラー0。加速度の各軸、角速度の各軸、温度31.06→31.45 °Cを取得した。静止校正・軸向き・精度は未検証。
+- 制御IRQ実行数2,049→21,700、周期超過0、最大463 cycles。SW取得有効、生値4095→4089。SWD停止が時間へ影響するため、これを500 Hzの実時間精度・最悪ジッター測定とは扱わない。ボタン押下は未検証。
+- ST-Link VCPのCOM167を2,000,000 baudで読取り、UARTの継続出力を確認。約2秒で21行を取得し、`build/hardware/uart.txt`へ保存。制御実行数119,299→120,249、IMU取得数117,632→118,570で各エラー0。これは連続動作確認であり、厳密な周期測定ではない。
+- 両CAN受信数0、RX破棄0、FIFO喪失0、bus-off計数0。FDCANは開始状態を確認したが、ダミーからの実データ受信は未確認。
+- OLEDは0x3C/3Dとも検出できず、完成フレーム0。I2C1 ISR=0x00008001（BUSY）、HAL ErrorCode=0x20（TIMEOUT）、PB7/PB8生入力ともLowを確認。実表示は未確認、電源・配線・プルアップの確認が必要。
+- アクチュエーター出力、電源操作、ブザー鳴動は実施していない。生成コード・`.ioc`は変更せず、SPI1の32分周設定はBoardが実行時に適用する。CubeMX本体の再生成は未実施。
 
 ### 500 Hz制御IRQ・10 Hzデバッグ出力（2026-09-14）
 

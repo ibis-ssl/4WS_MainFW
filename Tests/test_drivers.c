@@ -288,6 +288,8 @@ static void test_app_periodic(void)
 }
 int main(int argc, char **argv)
 {
+    void test_peripherals(void);
+    if (argc>1 && strcmp(argv[1],"peripherals")==0) { test_peripherals(); return 0; }
     if (argc>1 && strcmp(argv[1],"app")==0) { test_app_periodic(); puts("PASS: 500 Hz ISR and 10 Hz main logging"); return 0; }
     test_can(); test_uart(); test_adc_switch(); test_buzzer(); test_power();
     test_control_timer();

@@ -5,6 +5,8 @@ param(
   [string]$ProgrammerPath = "",
   [string]$CubeCLTPath = "",
   [string]$Serial = "",
+  [ValidateRange(100, 24000)]
+  [int]$Frequency = 1000,
   [switch]$List,
   [switch]$ConnectOnly,
   [switch]$NoVerify,
@@ -28,7 +30,7 @@ $programmer = Resolve-Executable -Name "STM32_Programmer_CLI.exe" -ExplicitPath 
 if ($List) {
   $arguments = @("-l", "st-link-only")
 } else {
-  $arguments = @("-c", "port=SWD")
+  $arguments = @("-c", "port=SWD", "freq=$Frequency")
   if ($Serial) { $arguments += "sn=$Serial" }
 
   if (-not $ConnectOnly) {

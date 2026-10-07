@@ -18,9 +18,9 @@
 
 ## ドライバ実装状況
 
-`Application/Board/board_gpio.c/.h`にDIP_0～3、SW_90、SW_2、IMU_FSYNCの生レベル取得と、LED_0～3・LED_R/G/Bの端子レベル設定を実装しています。生成された`main.h`のピン定義を利用し、入力はHigh/Low、出力はHigh/Low指定として扱います。有効極性や用途は確定していません。初期化後に呼び出すAPIで、現時点では起動処理から呼び出していません。
+`Application/Board/board_gpio.c/.h`にDIP_0～3、SW_90、SW_2、IMU_FSYNCの生レベル取得と、LED_0～3・LED_R/G/Bの端子レベル設定を実装しています。生成された`main.h`のピン定義を利用し、入力はHigh/Low、出力はHigh/Low指定として扱います。LED APIはAppの起動表示から使用し、ユーザー指定により全LEDをHigh点灯として扱います。入力の有効極性や用途は未確定です。
 
-Classic CAN、旧電源基板、UART4デバッグ、ブザー、U_BTN取得・判定を実装済みです。SPIとアクチュエーター出力系は未実装、基板の実機動作確認は未実施です。[基礎ドライバ](drivers.md)に実装仕様を記載しています。
+Classic CAN、旧電源基板、UART4デバッグ、ブザー、U_BTN取得・判定を実装済みです。2026-10-08の接続情報に基づき、Orion CAN受信解析、SPI1のICM-20602取得、I2C1のSH1106表示を追加しました。CM4 SPIとアクチュエーター出力系は未実装です。[基礎ドライバ](drivers.md)と[CAN・IMU・OLED](peripherals.md)に実装仕様、[開発手順](development.md)に検証結果を記載しています。
 
 CAN、デバッグUART、ブザー、ユーザーSWの調査時点の比較は[ドライバ互換調査](driver_compatibility.md)を参照してください。以降の表は生成設定とBoardの実行時設定を記録します。CANのClassic化とADCのU_BTN取得は`.ioc`・生成コードへ反映済みです。DMA・NVICはBoardが実行時に設定します。
 
@@ -48,7 +48,7 @@ STM32G474RET6（LQFP64）を使用します。16 MHz HSIをPLLへ入力し、`M=
 | PB3 | ESC_PWM | TIM2_CH2 PWM |
 | PB5 | INTERRUPTER_OUT | TIM3_CH2 PWM |
 | PB6 / PB12 | FDCAN2 TX / RX | FDCAN2 |
-| PB7 / PB8 | I2C1 SDA / SCL | I2C1、open-drain |
+| PB7 / PA15 | I2C1 SDA / SCL | I2C1、AF4・open-drain。PA15 SCLはLCD用J18-3（ユーザー提示の回路図・基板対応） |
 | PB11 | LED_1 | GPIO出力、初期Low |
 | PB13 / PB14 / PB15 | SPI2 SCK / MISO / MOSI | SPI2スレーブ |
 | PC0 / PC1 | LPUART1 RX / TX | LPUART1 |
@@ -70,10 +70,10 @@ STM32G474RET6（LQFP64）を使用します。16 MHz HSIをPLLへ入力し、`M=
 | ADC1 | IN3 U_BTN、12 bit、PCLK/4、連続、640.5 cycles、4倍平均、DMA1 Channel1循環 |
 | FDCAN1 | Normal、Classic、自動再送、1 Mbit/s |
 | FDCAN2 | Normal、Classic、自動再送、1 Mbit/s |
-| I2C1 | 7 bit address、Fast mode指定、timing `0x40621236` |
+| I2C1 | 7 bit address。生成初期値はFast mode指定・timing `0x40621236`。OLED疎通確認時にBoardが内部プルアップ・timing `0xF0F1FFFF`（約20 kHz）へ変更 |
 | LPUART1 | 2,000,000 baud、8-N-1、flow controlなし |
 | UART4 | デバッグ、2,000,000 baud、8-N-1、TX DMA1 Channel2、RX 1 byte割り込み |
-| SPI1 | マスター、full duplex、8 bit、Mode 0、MSB first、software NSS、10.625 Mbit/s計算値 |
+| SPI1 | マスター、full duplex、8 bit、Mode 0、MSB first、software NSS。生成初期値10.625 Mbit/s、IMU開始時にBoardが5.3125 Mbit/sへ設定 |
 | SPI2 | スレーブ、full duplex、8 bit、Mode 0、MSB first、software NSS |
 | TIM1 CH1 | PWM、prescaler 16、period 65535、pulse 0 |
 | TIM2 CH2 | PWM、prescaler 170、period 1000、pulse 0 |
@@ -91,12 +91,14 @@ PA0～PA3はアナログ設定ですが、regular conversionはADC1_IN3（PA2、
 
 ### FDCAN
 
+2026-10-08にユーザーからトランシーバーVIOの誤配線により使用不可と確認。以下はFW設定であり、VIO修正後の通信検証は未実施。
+
 両FDCANはClassic CANで、170 MHz、prescaler 10、time segment 1/2が14/2、SJW=1で1 Mbit/sになります。data phase設定はClassicでは使用しません。トランシーバー、終端、配線、HSI起点の通信精度は実機で未確認です。
 
-標準フィルターは各1個、拡張フィルターは0。Boardが標準ID全受入れと拡張・remote拒否、開始・通知を設定します。電源だけ旧基板互換として実装し、アクチュエーター出力系は未実装です。
+標準フィルターは各1個、拡張フィルターは0。Boardが標準ID全受入れと拡張・remote拒否、開始・通知を設定します。旧電源基板通信とOrion形式テレメトリーの受信解析を実装し、アクチュエーター出力系は未実装です。
 
 ### SPIとCS
 
 CM4との通信方式はSPIと定義されていますが、使用するSPIインスタンスと信号配線は未確定です。SPI1はsoftware NSSで、SPI_IMU_CSはGPIO出力です。SPI2もsoftware NSSのスレーブですが、CM4_CSはSTM32側のGPIO出力になっています。CM4とのmaster/slave関係、CM4_CSの実際の役割、CSの駆動側と極性を回路図で確認してください。今回の周辺HW定義では、この設定は変更していません。
 
-SPI_IMU_CSとCM4_CSは起動時Lowです。接続機器のCSがactive-lowの場合、初期化中から選択状態になるため初期レベルの見直しが必要です。
+SPI_IMU_CSとCM4_CSの生成初期レベルはLowです。IMUはBoard開始時にCSをHighへ戻し、SPI転送時だけLowにします。CM4_CSの役割と初期レベルはCM4通信仕様の確定時に確認します。

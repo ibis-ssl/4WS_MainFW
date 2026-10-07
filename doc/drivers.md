@@ -2,9 +2,15 @@
 
 ## 今回の確定事項と状態
 
-2026-09-13のユーザー指定に基づき、Classic CAN転送、旧電源基板通信、UART4デバッグ、Hz指定ブザー、旧HWと同じADCユーザーSWを実装した。モーター・ドリブラー・キッカーの出力API、ESC PWM、ボタンからのアクチュエーター操作は未実装。基板への書き込みと実機確認は行っていない。
+2026-09-13のユーザー指定に基づき、Classic CAN転送、旧電源基板通信、UART4デバッグ、Hz指定ブザー、旧HWと同じADCユーザーSWを実装した。2026-10-08にはOrion形式のCAN受信解析、ICM-20602取得、SH1106表示を追加した。詳細は[CAN・IMU・OLED](peripherals.md)、実機検証結果は[開発手順](development.md)を参照。モーター・ドリブラー・キッカーの出力API、ESC PWM、ボタンからのアクチュエーター操作は未実装。
 
-`main()`のUSER CODEから`app_init()`、メインループから`app_process()`を呼ぶ。起動時はUART4受信、ADC取得、両CANの受信を開始し、ブザーはCCR=0の停止状態にする。最後にTIM6の500 Hz制御IRQを開始する。UART状態表示は起動後100 msから常時10 Hzで行う。電源ON/OFF・保護値・リセットなどのCAN指令は自動送信しない。初期化失敗は`Error_Handler()`へ伝える。
+`main()`のUSER CODEから`app_init()`、メインループから`app_process()`を呼ぶ。起動時はUART4受信、ADC取得、両CANの受信を開始し、ブザーはCCR=0の停止状態にする。IMU取得の状態初期化・OLED検出後、最後にTIM6の500 Hz制御IRQを開始する。UART状態表示は100 ms間隔を基準に常時出力する。電源ON/OFF・保護値・リセットなどのCAN指令は自動送信しない。基礎ドライバの初期化失敗は`Error_Handler()`へ伝え、IMU・OLEDの非接続や失敗はmainで再試行する。
+
+## 起動LEDシーケンス（2026-10-08）
+
+Appが`board_gpio_write_led_level()`を使用し、LED_0→LED_1→LED_2→LED_3→LED_R→LED_G→LED_Bを1個ずつ各200 ms点灯する。初めに全消灯し、最後の青の後も全消灯する。`app_init()`で開始し、`app_process()`で経過時刻を確認して切り替える。HAL_DelayやIRQ内の操作は行わない。mainの遅延時は切替を追い掛けず、次のLEDの表示時間を確保する。
+
+`App/app.h`の`APP_STARTUP_LED_ACTIVE_HIGH_MASK`はbit 0～6が0/1/2/3/R/G/Bに対応し、1でHigh点灯、0でLow点灯。ユーザー指定により0x7F（全High点灯）とした。表示時間は`APP_STARTUP_LED_DURATION_MS`で変更できる。GPIOのピン設定・`.ioc`・生成コードは変更していない。
 
 ## 機体制御タイマー（2026-09-14）
 

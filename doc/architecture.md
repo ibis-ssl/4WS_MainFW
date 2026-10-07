@@ -20,7 +20,7 @@
 | `Application/Control/` | 4輪操舵の運動学、フィードバック制御、推定・フィルター | `steering_control`、`drive_control`、`odometry` |
 | `Application/App/` | 起動、周期処理、モード遷移、指令の選択、通信断・異常時の判断、出力の統括 | `app`、`app_mode`、`app_control`、`app_comm` |
 
-現在はBoardのGPIO・CAN・UART4・ユーザーADC・ブザー、DeviceのユーザーSW・ブザー・電源、Protocolの電源形式、Appの起動・処理を実装している。詳細は[基礎ドライバ](drivers.md)を参照する。Controlと他の機器モジュールは必要になった時点で作成する。空の初期化関数や成功を返すだけのドライバは用意しない。
+現在はBoardのGPIO・CAN・UART4・ユーザーADC・ブザー・IMU SPI・OLED I2C、DeviceのユーザーSW・ブザー・電源・ICM-20602・SH1106・Orion CAN、Protocolの電源形式・Orion受信形式、Appの起動・処理・診断表示を実装している。詳細は[基礎ドライバ](drivers.md)と[CAN・IMU・OLED](peripherals.md)を参照する。Controlと他の機器モジュールは必要になった時点で作成する。空の初期化関数や成功を返すだけのドライバは用意しない。
 
 ## 依存方向
 
@@ -70,9 +70,9 @@ UARTの整形関数名は`p()`とし、main側で常時10 Hz実行する。`p()`
 
 `MX_GPIO_Init()`完了後に使用する。戻り値はAPI処理の成否で、端子の電気的な正常性は示さない。点灯・押下の極性、デバウンス、DIP値からモードへの変換は含まない。`U_BTN`はアナログ入力なので本APIの対象外。CM4_CS、SPI_IMU_CS、PWM、無名ピンも対象外。
 
-APIはビルド対象へ登録するが、起動処理からは呼び出さない。基板の動作確認は未実施であり、この追加により出力試験が自動実行されることはない。
+GPIO APIはビルド対象へ登録する。2026-10-08にAppからLED生レベル操作を使用する起動表示を追加した。Appが点灯極性と0→1→2→3→R→G→Bの順序を管理し、mainで切り替える。押下極性とLEDの実表示は別途確認する。
 
-CAN、UART4、ブザー、U_BTNの基礎ドライバは起動処理へ接続済み。GPIO API自体は起動処理から操作しない。ADC1の取得対象はU_BTNだけに変更した。SPI2スレーブに対してCM4_CSが出力である点は未解決で、CM4通信は未実装。
+CAN、UART4、ブザー、U_BTNの基礎ドライバは起動処理へ接続済み。GPIOのLED APIはAppの起動表示から操作する。ADC1の取得対象はU_BTNだけに変更した。SPI2スレーブに対してCM4_CSが出力である点は未解決で、CM4通信は未実装。
 
 ## ビルドと生成コード
 

@@ -21,6 +21,34 @@ static inline void __set_PRIMASK(uint32_t value) { mock_primask = value; }
 extern void (*mock_dmb_hook)(void);
 static inline void __DMB(void) { if (mock_dmb_hook) { void (*hook)(void)=mock_dmb_hook; mock_dmb_hook=NULL; hook(); } }
 uint32_t HAL_GetTick(void);
+typedef struct { struct { uint32_t BaudRatePrescaler; } Init; } SPI_HandleTypeDef;
+typedef struct { struct { uint32_t Timing; } Init; } I2C_HandleTypeDef;
+typedef struct { uint32_t Pin, Mode, Pull, Speed, Alternate; } GPIO_InitTypeDef;
+#define GPIOB ((void *)2)
+#define GPIOA ((void *)3)
+#define GPIO_PIN_15 32768U
+#define GPIO_PIN_7 128U
+#define GPIO_PIN_8 256U
+#define GPIO_MODE_AF_OD 1U
+#define GPIO_PULLUP 1U
+#define GPIO_SPEED_FREQ_LOW 0U
+#define GPIO_AF4_I2C1 4U
+#define I2C_ANALOGFILTER_ENABLE 0U
+#define __HAL_I2C_DISABLE(handle) ((void)(handle))
+HAL_StatusTypeDef HAL_I2C_Init(I2C_HandleTypeDef *);
+HAL_StatusTypeDef HAL_I2CEx_ConfigAnalogFilter(I2C_HandleTypeDef *, uint32_t);
+HAL_StatusTypeDef HAL_I2CEx_ConfigDigitalFilter(I2C_HandleTypeDef *, uint32_t);
+void HAL_GPIO_Init(void *, GPIO_InitTypeDef *);
+extern SPI_HandleTypeDef hspi1;
+extern I2C_HandleTypeDef hi2c1;
+#define SPI_BAUDRATEPRESCALER_32 32U
+#define GPIO_PIN_SET 1U
+#define GPIO_PIN_RESET 0U
+HAL_StatusTypeDef HAL_SPI_Init(SPI_HandleTypeDef *);
+HAL_StatusTypeDef HAL_SPI_TransmitReceive(SPI_HandleTypeDef *, uint8_t *, uint8_t *, uint16_t, uint32_t);
+void HAL_GPIO_WritePin(void *, uint16_t, uint32_t);
+HAL_StatusTypeDef HAL_I2C_IsDeviceReady(I2C_HandleTypeDef *, uint16_t, uint32_t, uint32_t);
+HAL_StatusTypeDef HAL_I2C_Master_Transmit(I2C_HandleTypeDef *, uint16_t, uint8_t *, uint16_t, uint32_t);
 void HAL_NVIC_SetPriority(IRQn_Type irq, uint32_t a, uint32_t b);
 void HAL_NVIC_EnableIRQ(IRQn_Type irq);
 void HAL_NVIC_DisableIRQ(IRQn_Type irq);
