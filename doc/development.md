@@ -107,6 +107,16 @@ python ./Script/test_drivers.py --cc "C:/Program Files/LLVM/bin/clang.exe"
 
 ## 検証記録
 
+### 動作中LEDの繰り返し点灯（2026-10-10）
+
+- 起動時からLED_0→LED_1→LED_2→LED_3→赤→緑→青を1個ずつ各200 ms点灯し、青の次はLED_0へ戻して繰り返す。全High点灯の指定を維持。mainで時刻を判定し、遅延時は連続切替を追い掛けず次のLEDの点灯時間を確保する。
+- Appのみ変更し、GPIO・生成コード・`.ioc`は変更していない。READMEと基礎ドライバ文書も更新した。
+- Debugビルドと`python ./Script/test_drivers.py`が成功。ST-Link SN `002D00373033510635393935`、SWD 1 MHzでDebug FWを書込み・照合・リセット成功。
+- CubeProgrammerの逐次読取りは約1.4秒/回で200 msの切替を捉えられなかった。ST-Link GDB serverでCPU実行を再開し、約4秒間GPIO出力を連続読取りして21状態の変化を確認。0/1/2/3/R/G/Bの順序、青→0の繰り返し、各観測で1個のみHighを確認した。別ポートの逐次読取りが切替をまたぐ場合は再読取りとの不一致を除外した。
+- 観測は`build/hardware/led-repeat-fast.json`。非同期読取りなので厳密な200 msの波形測定ではない。点灯の目視と長時間の動作確認は未実施。
+- デバッガー切断後もUART4で動作継続を確認。約10秒間でOLED完成画面が101増え、OLED/IMUエラー0、制御周期超過0、CAN1受信の継続を確認した。デバッガー接続時のCPU停止による制御入口遅延は計数に残っている。
+
+
 ### OLED I2C速度の段階試験（2026-10-10）
 
 - 対象はSTM32G474RET6、ST-Link SN `002D00373033510635393935`、SWD 1 MHz。OLEDはPB7 SDA / PA15 SCL、内部プルアップ、0x3C。Debug FWを各段階で書込み・照合・リセットし、UART4（COM167、2,000,000 baud）で計数を読み取った。

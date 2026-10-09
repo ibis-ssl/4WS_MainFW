@@ -17,31 +17,30 @@
 #include "Board/board_gpio.h"
 
 static uint32_t report_ms;
-static uint32_t startup_led_ms;
-static unsigned int startup_led_index;
-static void set_startup_led(board_gpio_led_t led, bool on)
+static uint32_t led_sequence_ms;
+static unsigned int led_sequence_index;
+static void set_led_sequence(board_gpio_led_t led, bool on)
 {
-    bool active_high = (APP_STARTUP_LED_ACTIVE_HIGH_MASK & (1U << (unsigned int)led)) != 0U;
+    bool active_high = (APP_LED_SEQUENCE_ACTIVE_HIGH_MASK & (1U << (unsigned int)led)) != 0U;
     (void)board_gpio_write_led_level(led, on == active_high);
 }
-static void startup_led_begin(void)
+static void led_sequence_begin(void)
 {
-    for (unsigned int i = 0; i < BOARD_GPIO_LED_COUNT; ++i) { set_startup_led((board_gpio_led_t)i, false); }
-    startup_led_index = 0;
-    startup_led_ms = board_millis();
-    set_startup_led(BOARD_GPIO_LED_0, true);
+    for (unsigned int i = 0; i < BOARD_GPIO_LED_COUNT; ++i) { set_led_sequence((board_gpio_led_t)i, false); }
+    led_sequence_index = 0;
+    led_sequence_ms = board_millis();
+    set_led_sequence(BOARD_GPIO_LED_0, true);
 }
-static void startup_led_process(void)
+static void led_sequence_process(void)
 {
     /* mainで時刻を判定し、センサー取得と制御IRQを止めずに1個ずつ切り替える。
      * mainが遅れた場合も次のLEDを200 ms確保し、連続切替で見えなくしない。 */
     uint32_t now = board_millis();
-    if (startup_led_index >= BOARD_GPIO_LED_COUNT ||
-        (uint32_t)(now - startup_led_ms) < APP_STARTUP_LED_DURATION_MS) { return; }
-    set_startup_led((board_gpio_led_t)startup_led_index, false);
-    startup_led_index++;
-    startup_led_ms = now;
-    if (startup_led_index < BOARD_GPIO_LED_COUNT) { set_startup_led((board_gpio_led_t)startup_led_index, true); }
+    if ((uint32_t)(now - led_sequence_ms) < APP_LED_SEQUENCE_DURATION_MS) { return; }
+    set_led_sequence((board_gpio_led_t)led_sequence_index, false);
+    led_sequence_index = (led_sequence_index + 1U) % BOARD_GPIO_LED_COUNT;
+    led_sequence_ms = now;
+    set_led_sequence((board_gpio_led_t)led_sequence_index, true);
 }
 bool app_init(void)
 {
@@ -49,7 +48,7 @@ bool app_init(void)
         return false;
     }
     report_ms = board_millis();
-    startup_led_begin();
+    led_sequence_begin();
     app_monitor_init();
     if (!board_control_timer_start(APP_CONTROL_FREQUENCY_HZ, app_control_step)) { return false; }
     /* 起動通知だけを鳴らし、mainの時間管理で100 ms後にLowへ戻す。 */
@@ -57,7 +56,7 @@ bool app_init(void)
 }
 void app_process(void)
 {
-    startup_led_process();
+    led_sequence_process();
     board_debug_uart_process();
     board_can_process();
     buzzer_process();
