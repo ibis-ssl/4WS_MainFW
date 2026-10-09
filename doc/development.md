@@ -74,11 +74,28 @@ STM32CubeProgrammer CLIまたはSTM32CubeCLTの場所を自動検出できない
 
 ## VS Code
 
+コードブラウズはMicrosoft C/C++拡張（`ms-vscode.cpptools`）を使用する。このワークスペースでは`C_Cpp.intelliSenseEngine=default`にし、STM32Cube clangdを`stm32cube-ide-clangd.enable=false`にする。ユーザー全体のIntelliSense無効設定は変更せず、プロジェクト内で上書きする。
+
+`.vscode/settings.json`の`C_Cpp.default.compileCommands`は`build/Debug/compile_commands.json`を参照する。ソースごとのインクルード・マクロ・Cortex-M4/FPUオプションは実際のビルド情報から取得する。先に`Build: Debug`タスク、または次を実行してDBを生成・更新する。
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File ./Script/build.ps1 -Configuration Debug
+```
+
+DBに直接載らないヘッダー向けにArm GCCのcompilerPath、`windows-gcc-arm`、gnu11、DEBUG/USE_HAL_DRIVER/STM32G474xxと明示インクルードを設定する。標準ヘッダーのパスはArm GCCへ問い合わせる。タグ索引はApplication/Core/Driversを対象とし、TestsのHALモックを全体索引へ混ぜない。Tests用のホストコンパイルDBは未設定。
+
+VS Codeでこのフォルダーを開き、F12で定義、Shift+F12で参照、Ctrl+Spaceで補完を使用する。設定変更後に解析が更新されない場合はコマンドパレットの`Developer: Reload Window`を実行する。`C/C++: Log Diagnostics`でArm GCC、windows-gcc-arm、Debugのcompile_commandsとSTM32G474xxを確認できる。必要なら`C/C++: Reset IntelliSense Database`で索引を再作成する。
+
+別PCやCubeCLT更新時は、`STM32VSCodeExtension.cubeCLT.path`、`C_Cpp.default.compilerPath`、`cmake.cmakePath`、`cmake.environment`のPATHを実際のインストール先へ変更してDebugをビルドする。CMake providerは使用せずDBへ直接接続するので、CMake ToolsでReleaseを選んでもコード解析はDebugのまま。[C/C++設定の公式説明](https://code.visualstudio.com/docs/cpp/customize-cpp-settings)を参照。
+
+
 `flash.ps1`と`build_and_flash.ps1`は`-Frequency`でSWD速度をkHz指定できます。既定は実機確認した1000 kHz、引数範囲は100～24000で、プローブが対応する速度へ調整される場合があります。
 
 `.vscode/tasks.json`には`Build: Debug`、`Build: Release`、`Build: Rebuild Debug`、`Flash: Build and Flash Debug`、`Flash: Dry Run Debug`、`Flash: List ST-LINK Probes`があります。タスクは`Script/`のPowerShellスクリプトを呼び出すため、コマンドラインと同じ手順になります。
 
-デバッグにはVS CodeのCortex-Debug拡張を使用します。`STM32G474: Build & Debug (ST-LINK)`はDebugビルド後に起動し、`STM32G474: Attach (ST-LINK)`は実行中のターゲットへ接続します。どちらもST-Linkと`build/Debug/4WS_MainFW.elf`を使用します。`.vscode/settings.json`の`STM32VSCodeExtension.cubeCLT.path`は、実際にインストールしたSTM32CubeCLTのルートへ変更してください。
+拡張の有効状態と競合の確認は[拡張機能の確認](vscode.md)を参照してください。STM32Cube CMakeのIntelliSense自動設定は停止し、CMake ToolsのCMakeとPATHをCubeCLT 1.21へ揃えました。
+
+デバッグにはVS CodeのCortex-Debug拡張を使用します。2026-10-10の確認時はCortex-Debugが全体で無効のため、次の構成を使うにはこのワークスペースで有効化する必要があります。`STM32G474: Build & Debug (ST-LINK)`はDebugビルド後に起動し、`STM32G474: Attach (ST-LINK)`は実行中のターゲットへ接続します。どちらもST-Linkと`build/Debug/4WS_MainFW.elf`を使用します。`.vscode/settings.json`の`STM32VSCodeExtension.cubeCLT.path`は、実際にインストールしたSTM32CubeCLTのルートへ変更してください。
 
 ## CubeMXで再生成する場合
 
@@ -106,6 +123,14 @@ python ./Script/test_drivers.py --cc "C:/Program Files/LLVM/bin/clang.exe"
 ビルド成功はコンパイル、リンク、bin／hex生成までを確認するものです。FDCAN、UART、SPI、I2C、ADC、PWMの電気的動作や接続機器との通信は保証しません。実機確認を行った場合は、基板、接続条件、FW成果物、確認内容を記録してください。
 
 ## 検証記録
+
+### VS Codeコードブラウズの修正（2026-10-10）
+
+- ユーザー設定でC_Cpp.intelliSenseEngine=disabled、既存のSTM32Cube clangdログで言語サーバー起動失敗を確認した。ワークスペースでC/C++解析を有効化し、STM32Cube clangdを無効化した。全体のユーザー設定と他プロジェクトは変更していない。
+- 実ビルドのDebugコンパイルDB、Arm GCC 14.3.1、Cortex-M4/ハードFPU、gnu11とSTM32G474xxを設定。ヘッダー向けのフォールバックと、実機コードに限定したタグ索引も設定した。
+- Debugビルド成功。設定JSONと全インクルードパス、GCC実行・標準ヘッダー検索、コンパイルDBの全ソース存在を照合した。開いている4WS_MainFWでboard_oled_i2c.cを開いた後、cpptools本体・Tag Parser・IntelliSense解析プロセスの起動を確認した。F12・補完のUI操作そのものは未検証。
+- ファームウェア・CMake・生成コード・`.ioc`は変更せず、実機書込みは行っていない。
+
 
 ### LCD描画・通信時間の実測（2026-10-10）
 

@@ -45,3 +45,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./Script/build.ps1 -Configur
 | [開発手順](doc/development.md) | ビルド、成果物、書き込み、CubeMX再生成 |
 
 周辺機能の設定値は生成コードと`4WS_MainFW.ioc`から読み取った現状です。回路との整合、通信相手との仕様、実機動作は別途確認が必要です。
+
+VS Codeのコードブラウズは、ワークスペースでC/C++ IntelliSenseを有効にし、Debugの`compile_commands.json`とArm GCCを使用する設定です。最初に`Build: Debug`を実行してください。設定・定義ジャンプ・補完の確認方法は[VS Codeの手順](doc/development.md#vs-code)を参照してください。
+
+C/C++解析はMicrosoft C/C++へ統一し、このワークスペースではSTM32Cube clangdとSTのIntelliSense自動設定を停止しています。その他の拡張の有効状態とデバッグ拡張の無効設定は[拡張機能の確認](doc/vscode.md)に記録しています。
