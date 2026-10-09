@@ -107,6 +107,32 @@ python ./Script/test_drivers.py --cc "C:/Program Files/LLVM/bin/clang.exe"
 
 ## 検証記録
 
+### LCD描画・通信時間の実測（2026-10-10）
+
+- 対象はSTM32G474RET6、HCLK=170 MHz（実機のSystemCoreClockを読取り）、I2C1 TIMINGR=0x60400D28、PB7/PA15内部プルアップ、SH1106 0x3C、128x64・1,024 byte全画面・137トランザクション。Debug FW（-O0）、通常の500 Hz制御・IMU取得・CAN受信・200 ms LED循環・100 ms診断画面更新を継続した。
+- 描画をbegin→commit、HAL送信をHAL_I2C_Master_Transmitの呼出し前後、OLED処理を各oled_processの実行区間、全画面転送をcommit→完了でDWT計測。最初の成功64画面を保存してから読み取った。別起動でも64画面を測定した。
+
+| 区間 | 1回目平均 | 2回目平均 | 2回目最小～最大 |
+| --- | --- | --- | --- |
+| 描画（画面消去・文字列整形・入力取得含む） | 0.305 ms | 0.305 ms | 0.278～0.340 ms |
+| HAL I2C同期送信137回の合計 | 31.034 ms | 31.041 ms | 30.964～31.107 ms |
+| oled_process実行時間の合計（HAL送信含む） | 31.350 ms | 31.358 ms | 31.286～31.431 ms |
+| commitから全画面転送完了まで | 37.273 ms | 37.293 ms | 35.942～37.621 ms |
+| 描画開始から全画面転送完了まで | 37.578 ms | 37.599 ms | 36.229～37.946 ms |
+| 描画とOLED処理の合計からHAL送信を除いた差分 | 0.620 ms | 0.623 ms | 0.574～0.683 ms |
+
+- 2回目は描画とOLED処理の合計が平均31.664 ms（10 Hz更新で1秒あたり約317 ms）、転送間の別処理・計測記帳等の間隔が平均5.935 ms。単一HAL送信の最大は0.260 msだった。各区間は割込みを含む経過時間であり、厳密なCPU専有時間ではない。同期HALの待機が処理時間の大半を占める。
+- 2回目の計測と同時期のUARTで約10秒間に100画面完成、OLED/IMUエラー0、制御周期超過0、CAN1/2の受信継続とRX破棄・bus-off 0を確認した。記録は`build/hardware/oled-timing-debug-1.json`と`oled-timing-debug-2.json`。各ファイルに全64画面の生サイクル値と集計を保存。
+- Debug／Releaseビルドと`python ./Script/test_drivers.py`成功。ST-Link SN `002D00373033510635393935`、SWD 1 MHzで計測対応Debug FWを書込み・照合・リセット済み。実機へはDebugを残した。生成コードと`.ioc`は変更していない。
+- 純粋なSCL波形の時間、LCD内部走査・見た目の反映時間、Releaseの実機時間は未測定。計測処理のオーバーヘッドを完全には除去していない。100 msの画面生成待ち時間は表の区間外。
+
+計測対応FWの書込み・リセット後、64画面が保存される約7秒以上待って次を実行する。再計測するときは先にMCUをリセットする。
+
+```powershell
+python ./Script/read_oled_timing.py --serial 002D00373033510635393935 --output build/hardware/oled-timing.json
+```
+
+
 ### 動作中LEDの繰り返し点灯（2026-10-10）
 
 - 起動時からLED_0→LED_1→LED_2→LED_3→赤→緑→青を1個ずつ各200 ms点灯し、青の次はLED_0へ戻して繰り返す。全High点灯の指定を維持。mainで時刻を判定し、遅延時は連続切替を追い掛けず次のLEDの点灯時間を確保する。

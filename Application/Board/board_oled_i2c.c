@@ -1,7 +1,10 @@
 /* 小分けの同期転送でmainの占有を抑える。制御IRQは割り込み可能なまま維持する。 */
 #include "Board/board_oled_i2c.h"
 #include "i2c.h"
+#include "Board/board_time.h"
 #include <string.h>
+static uint32_t last_transfer_cycles;
+uint32_t board_oled_i2c_last_transfer_cycles(void) { return last_transfer_cycles; }
 bool board_oled_i2c_init(void)
 {
     if (__get_IPSR() != 0U || HAL_RCC_GetPCLK1Freq() != 170000000U) { return false; }
@@ -36,6 +39,9 @@ bool board_oled_i2c_write(uint8_t address, bool data, const uint8_t *bytes, size
     uint8_t packet[33];
     packet[0] = data ? 0x40U : 0x00U;
     memcpy(packet + 1, bytes, length);
-    return HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(address << 1U), packet,
-        (uint16_t)(length + 1U), 25U) == HAL_OK;
+    uint32_t started = board_cycles();
+    HAL_StatusTypeDef result = HAL_I2C_Master_Transmit(&hi2c1, (uint16_t)(address << 1U), packet,
+        (uint16_t)(length + 1U), 25U);
+    last_transfer_cycles = board_cycles() - started;
+    return result == HAL_OK;
 }

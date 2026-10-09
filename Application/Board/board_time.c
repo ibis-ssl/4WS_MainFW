@@ -2,3 +2,4 @@
 #include "Board/board_time.h"
 #include "stm32g4xx_hal.h"
 uint32_t board_millis(void) { return HAL_GetTick(); }
+uint32_t board_cycles(void) { return DWT->CYCCNT; }

@@ -3,4 +3,6 @@
 #define BOARD_TIME_H
 #include <stdint.h>
 uint32_t board_millis(void);
+/* 制御タイマー起動後のDWTサイクル数。HCLKごとに増加し、32 bitの周回を差分で扱う。 */
+uint32_t board_cycles(void);
 #endif

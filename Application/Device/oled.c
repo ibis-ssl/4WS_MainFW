@@ -1,12 +1,17 @@
 /* ページの列位置指定と8 byte転送を別のmain呼出しに分け、IMU取得を挟む。 */
 #include "Device/oled.h"
 #include "Board/board_oled_i2c.h"
+#include "Board/board_time.h"
 #include <stddef.h>
 #include <string.h>
 static uint8_t pixels[1024];
 static oled_status_t status;
 static bool editing;
 static uint8_t page, part;
+volatile oled_timing_sample_t oled_timing_samples[OLED_TIMING_SAMPLE_COUNT];
+volatile uint32_t oled_timing_count;
+static oled_timing_sample_t timing;
+static uint32_t render_started, frame_started;
 #define OLED_CHUNK_SIZE 8U
 /* 診断用の5x7字形。英大文字・数字と最小限の記号だけを表示する。 */
 static const uint8_t digits[10][5] = {
@@ -51,6 +56,7 @@ bool oled_init(void)
 bool oled_begin(void)
 {
     if (!status.ready || status.busy || editing) { return false; }
+    render_started = board_cycles();
     memset(pixels, 0, sizeof(pixels)); editing = true; return true;
 }
 bool oled_text(uint8_t row, uint8_t column, const char *text)
@@ -62,11 +68,15 @@ bool oled_text(uint8_t row, uint8_t column, const char *text)
 bool oled_commit(void)
 {
     if (!editing) { return false; }
+    /* beginのバッファ消去から文字列生成・GPIO取得・描画までをまとめて測る。 */
+    frame_started = board_cycles();
+    timing = (oled_timing_sample_t){.render_cycles = frame_started - render_started};
     editing = false; status.busy = true; page = 0; part = 0; return true;
 }
 void oled_process(void)
 {
     if (!status.ready || !status.busy) { return; }
+    uint32_t process_started = board_cycles();
     bool ok;
     if (page == 8U) {
         const uint8_t on = 0xAF;
@@ -82,5 +92,17 @@ void oled_process(void)
         if (ok && ++part == 128U / OLED_CHUNK_SIZE + 1U) { part = 0; page++; }
     }
     if (!ok) { status.errors++; status.ready = false; status.busy = false; }
+    uint32_t ended = board_cycles();
+    uint32_t transfer_cycles = board_oled_i2c_last_transfer_cycles();
+    timing.transfer_cycles += transfer_cycles;
+    timing.process_cycles += ended - process_started;
+    timing.transactions++;
+    if (transfer_cycles > timing.max_transfer_cycles) { timing.max_transfer_cycles = transfer_cycles; }
+    if (ok && !status.busy && oled_timing_count < OLED_TIMING_SAMPLE_COUNT) {
+        /* countは完成レコードを書いた後に進め、未完成データを公開しない。 */
+        timing.frame_cycles = ended - frame_started;
+        oled_timing_samples[oled_timing_count] = timing;
+        oled_timing_count++;
+    }
 }
 void oled_get_status(oled_status_t *out) { if (out != NULL) { *out = status; } }
