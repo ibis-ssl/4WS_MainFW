@@ -59,6 +59,8 @@ void Error_Handler(void);
 /* Private defines -----------------------------------------------------------*/
 #define SW_90_Pin GPIO_PIN_13
 #define SW_90_GPIO_Port GPIOC
+#define SW_1_Pin GPIO_PIN_14
+#define SW_1_GPIO_Port GPIOC
 #define SW_2_Pin GPIO_PIN_15
 #define SW_2_GPIO_Port GPIOC
 #define PHOTO_0_Pin GPIO_PIN_0

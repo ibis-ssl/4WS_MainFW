@@ -107,6 +107,36 @@ python ./Script/test_drivers.py --cc "C:/Program Files/LLVM/bin/clang.exe"
 
 ## 検証記録
 
+### スイッチ内部プルアップと1/0表示（2026-10-10）
+
+- `hardware.md`の回路仕様に従い、外付けプルアップのないSW8～10（PC13/14/15）に内部プルアップを設定。外付け10 kΩのあるDIP、抵抗ラダーのU_BTN、NRST、IMU_FSYNCは設定を変更しない。
+- `.ioc`のGPIO_PuPdをGPIO_PULLUPへ変更し、生成`gpio.c`のSW群とIMU_FSYNCを分離。PC14をSW_1として`.ioc`・生成`main.h`・Board入力IDへ追加。設定と生成コードを照合した。CubeMX本体による再生成は未実施で、再生成後は同じピン割当とpull設定を確認する。
+- OLED下3行をDIP 0123、SW 012、BTN LTRBCの1/0表示へ変更。GPIO生レベルはHigh=1/Low=0。ADC方向判定は押下0・非押下1、無効時は?。同時押下、デバウンス、モード割当は追加していない。NRSTは表示対象外。
+- Debug／Releaseビルド、既存HALモック試験成功。Appの入力モックは開放Highとして扱うため、実接点の押下・変更を検証するものではない。Debug Flash 61,740 byte、Release Flash 35,788 byte、RAMは両構成12,784 byte。
+- ST-Link SN `002D00373033510635393935`、SWD 1 MHzでDebug FWを書込み・照合・リセット成功。GPIOC PUPDR=0x54000000でPC13～15がpull-up、GPIO入力で各SW=Highを確認。
+- 実機の画面バッファを取得・字形を復号し、`DIP 0123 0111`、`SW  012  111`、`BTN LTRBC 11111`を確認。`build/hardware/switch-display.bin`、`switch-display.txt`に保存。`switch-monitor.json`でOLEDアドレス0x3C、完成39フレーム・エラー0、IMUエラー0、制御周期超過0を確認。
+- スイッチの実押下・ロータリー全位置・画面の目視は未確認。SWD診断はCPU停止を伴うため、診断中のCAN受信喪失・破棄は通常運転の評価と区別する。
+
+### 起動ブザーと追加仕様（2026-10-09）
+
+- ユーザー指定でBATT_Vは10 kΩ/1 kΩ分圧の11倍換算、CM4とのSPIではSTM32側slave・CM4側masterと記録。BATT_V取得、基準電圧校正、CM4通信処理は未実装。SPI生成設定は変更していない。
+- 周辺機器と500 Hz制御IRQの開始後に2 kHz・100 msの起動音を追加。待機はせずmainの`buzzer_process()`で停止する。停止はPWM有効・CCR=0でLow出力。PA8の内部プルダウンをBoardが適用し、PWMの一時停止中も浮きを抑える。生成コード・`.ioc`は変更していない。
+- Debug／Releaseビルドと既存HALモック試験成功。App試験に、起動時の2 kHz設定、99 msまではCCR非ゼロ、100 ms以降はCCR=0の確認を追加した。
+- Debug Flash 61,204 byte、Release Flash 35,500 byte、RAMは両構成12,784 byte。同じST-Link SN `002D00373033510635393935`・SWD 1 MHzでDebug FWを書込み・照合・リセット成功。
+- 実機ではTIM1 PSC=1・ARR=42499（170 MHz設定で計算上2 kHz）、停止後CCR1=0、CC1E=1、CEN=1を確認。PA8のプルダウン設定とGPIO入力Lowも確認した。
+- リセット後のSWDポーリングでは初回取得が約1397 msまで遅れ、100 msの鳴動中は捕捉できなかった。`build/hardware/startup-buzzer.json`に停止状態を保存。音の聴取、実PWM周波数、厳密な鳴動時間、電源投入直後からの波形は未測定。100 ms停止にはmainの呼出し遅れが加わる。
+
+### CAN VIO修正後の実機受信確認（2026-10-09）
+
+- ユーザーがCANトランシーバーのVIOを修正。接続中のOrion相当ダミーからの受信を、現在のDebug FWで確認した。今回はFWの変更・再書込み・アクチュエーター指令送信は行っていない。
+- 対象: STLINK-V3MINIE SN `002D00373033510635393935`、SWD 1 MHz、MCU ID 0x469、電圧3.27 V。参照ELF `build/Debug/4WS_MainFW.elf`。BIN SHA256 `ECA253C45EB7DAC03077C2A3CD5DF9B0E62348AFDD54AC2845199131009775A0`、ソースHEAD `e132551`。
+- 最初の診断値（uptime 70,163 ms）でCAN1受信142,836・解析142,836、CAN2受信296,034・解析252,388を確認。両バスのbus-offは0。CAN2のソフトウェアRX破棄45,780が既に発生していた。
+- CPUを停止しないCOM167・2 Mbps UART観測を約10秒行い、102行を保存。CAN1受信414,182→435,274（+21,092）、CAN2受信854,964→898,406（+43,442）。CAN1破棄0、CAN2破棄132,951→139,727（+6,776）。両bus-off・制御周期超過は0のまま。制御呼出し+5,049を2 ms換算すると約10.10秒、受理速度は概算CAN1約2,089、CAN2約4,302フレーム/秒。CAN2破棄は概算約671フレーム/秒で、SWD停止だけによるものではない。
+- CAN1の解析済みIDは0x202/203、0x212/213、0x222/223、0x232/233、0x502/503。CAN2は0x200/201/204、0x210/211/214、0x220/221/224、0x230/231/240、0x500/501を確認。例: CAN1の0x202は0 rps・3.96847 rad、0x212は23.6092 V、0x222は18/35。CAN2の0x200は0 rps・2.38653 rad、0x210は23.7067 V、0x224は23/24/24。これらは受信・復号値であり、単位・校正精度を実測保証したものではない。
+- ドライバ統計のRAM取得では両バスrx_invalid=0・rx_errors=0・bus-off=0を確認。ハードウェアFIFO喪失は各1で、途中のSWD診断でCPU停止を伴っているため通常運転の結果とは区別する。受信キューの満杯はソフトウェアの取りこぼしであり、20フレームの容量とmain回収・OLED同期転送などの負荷対策が残る。原因を単一箇所に確定してはいない。
+- 受信キューの生フレームでは0x215/0x216のDLC=4を確認した。現在の電源・Orion解析は8 byte限定なので、この電圧フレームはCAN転送層で受信しても機器状態へ反映されない。0x244（DLC=8）も受信したが、現在の解析対象外。CAN2の受信数と解析受理数の差を通信不良だけとみなさず、これらの形式差も区別する。4 byte電源パケット対応は今回実施していない。
+- 保存先: `build/hardware/can-vio-fixed-1.json`、`can-vio-uart-10s.txt`、`can-vio-uart-summary.json`、`can-vio-states.bin`、`can-vio-samples.bin`、`can-vio-decoded.json`。SWD取得後はCPUを再開した。CAN送信・通信断復帰・bus-off復帰・波形/終端/通信精度は未検証。文書のみ更新したためビルドは実行していない。
+
 ### LCD I2C SCLをPA15へ修正（2026-10-08）
 
 - ユーザー提示の回路図・基板対応に従い、LCD用J18-3のSCLをPB8からPA15へ修正。`.ioc`のピン一覧とI2C1_SCL割当、`Core/Src/i2c.c`のGPIOAクロック有効化・AF4初期化・解除を同期した。SDAはPB7を維持。Boardの内部プルアップもPB7/PA15へ変更。

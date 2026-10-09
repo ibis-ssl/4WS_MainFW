@@ -22,6 +22,7 @@ static const board_gpio_pin_t input_pins[BOARD_GPIO_INPUT_COUNT] = {
     [BOARD_GPIO_INPUT_SW_90] = {SW_90_GPIO_Port, SW_90_Pin},
     [BOARD_GPIO_INPUT_SW_2] = {SW_2_GPIO_Port, SW_2_Pin},
     [BOARD_GPIO_INPUT_IMU_FSYNC] = {IMU_FSYNC_GPIO_Port, IMU_FSYNC_Pin},
+    [BOARD_GPIO_INPUT_SW_1] = {SW_1_GPIO_Port, SW_1_Pin},
 };
 
 static const board_gpio_pin_t led_pins[BOARD_GPIO_LED_COUNT] = {

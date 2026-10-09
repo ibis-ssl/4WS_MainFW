@@ -6,13 +6,17 @@ ochin-CM4v2にマウントされたCM4とSPIで通信し、機体内部の高速
 
 Classic CAN転送と旧電源基板通信、Orion形式のCANテレメトリー受信、ICM-20602の加速度・角速度・温度取得、SH1106（128x64）の診断表示、UART4デバッグ、Hz指定ブザー、旧HW互換のADCユーザーSWを実装しています。機体制御、CM4 SPI通信、アクチュエーター出力系は未実装です。
 
-現基板のCANはトランシーバーVIO誤配線のため使用不可です。OLEDはSDA=PB7・SCL=PA15（J18-3）で、内部プルアップ・約20 kHzの低速設定により0x3Cの応答と画面データ転送を実機確認しました。外部プルアップ追加後の波形確認は未実施です。IMUは実機取得を確認済みです。
+CANはVIO修正後の2026-10-09に両バスの実機受信とOrion形式の解析を確認しました。CAN2では受信キュー満杯による破棄が継続しており、負荷時の取りこぼし対策が残っています。OLEDはSDA=PB7・SCL=PA15（J18-3）で、内部プルアップ・約20 kHzの低速設定により0x3Cの応答と画面データ転送を実機確認しました。外部プルアップ追加後の波形確認は未実施です。IMUは実機取得を確認済みです。
 
 起動時にLED_0→1→2→3→赤→緑→青の順で各200 ms点灯し、最後は全消灯します。ユーザー指定によりすべてHighで点灯します。mainで切り替えるため、センサー取得と制御IRQを待機で止めません。
 
+追加SW（PC13～15）は内部プルアップを設定済みです。OLEDの下3行にDIP_0～3、SW_0～2、5方向ボタン（LTRBC）を1/0表示します。1は開放/非押下、0は閉成/押下、ADC無効時は`?`です。詳細は[スイッチ仕様](doc/hardware.md#ディスプレイのスイッチ表示)を参照してください。
+
 機体制御の入口はTIM6割り込みから500 Hz（2 ms）で直接実行します。UART4の状態表示はmainの`p()`で整形し、入力操作なしで常時10 Hz出力します。制御演算・アクチュエーター出力は今後この制御入口へ追加します。
 
-ユーザーコードは`Application/`に配置します。実装仕様とAPIは[基礎ドライバ](doc/drivers.md)、追加機器は[CAN・IMU・OLED](doc/peripherals.md)、配置方針は[コード階層](doc/architecture.md)を参照してください。電源指令は自動送信せず、ブザーは停止状態で起動します。実機検証の結果と未確認範囲は[開発手順](doc/development.md)に記録します。
+ユーザーコードは`Application/`に配置します。実装仕様とAPIは[基礎ドライバ](doc/drivers.md)、追加機器は[CAN・IMU・OLED](doc/peripherals.md)、配置方針は[コード階層](doc/architecture.md)を参照してください。電源指令は自動送信せず、起動ブザーを2 kHzで100 ms鳴らした後、出力をLowへ戻します。実機検証の結果と未確認範囲は[開発手順](doc/development.md)に記録します。
+
+BATT_Vは10 kΩ/1 kΩ分圧（電池電圧はADC端子電圧の11倍）、CM4とのSPIではSTM32側をslaveとする仕様です。BATT_V取得とCM4通信処理は未実装です。
 
 CAN、デバッグUART、ブザー、ユーザーSWなどは旧世代と同等にできる部分を同等仕様にする方針です。[ドライバ互換調査](doc/driver_compatibility.md)に、旧ソースだけで実装できる範囲、現行設定との差分、新基板で確認する項目を整理しています。
 
@@ -35,7 +39,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./Script/build.ps1 -Configur
 | [ドライバ互換調査](doc/driver_compatibility.md) | CAN・UART・ブザー・SWなどの旧仕様と実装可能範囲 |
 | [基礎ドライバ](doc/drivers.md) | 現在の実装仕様、API、DMA・IRQの管理、ソフト検証 |
 | [CAN・IMU・OLED](doc/peripherals.md) | Orion受信形式、ICM-20602取得、SH1106診断表示、SWD読取り |
-| [ハードウェア](doc/hardware.md) | 周辺HWの定義とMCU、クロック、ピン、周辺機能の現行設定 |
+| [ハードウェア](doc/hardware.md) | 周辺HWの定義、SW・DIPの回路図対応とIO設定、MCU・クロック・周辺機能の現行設定 |
 | [開発手順](doc/development.md) | ビルド、成果物、書き込み、CubeMX再生成 |
 
 周辺機能の設定値は生成コードと`4WS_MainFW.ioc`から読み取った現状です。回路との整合、通信相手との仕様、実機動作は別途確認が必要です。

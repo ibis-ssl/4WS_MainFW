@@ -15,6 +15,7 @@ typedef enum {
     BOARD_GPIO_INPUT_SW_90,
     BOARD_GPIO_INPUT_SW_2,
     BOARD_GPIO_INPUT_IMU_FSYNC,
+    BOARD_GPIO_INPUT_SW_1,
     BOARD_GPIO_INPUT_COUNT
 } board_gpio_input_t;
 

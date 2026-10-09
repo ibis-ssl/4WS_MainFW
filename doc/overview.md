@@ -64,17 +64,17 @@ RoboCup SSL用ロボットの4輪ステアリング機体に搭載するメイ�
 
 `main()`はHALとクロックを初期化し、GPIO、ADC1、FDCAN1/2、I2C1、LPUART1、UART4、SPI1/2、TIM1/2/3、CORDICの初期化関数を呼び出します。その後、USER CODEから`app_init()`を呼び、`while (1)`で`app_process()`を繰り返します。
 
-AppはUART4デバッグ、ADCユーザーSW、両Classic CAN、停止状態のブザー、IMU取得の状態管理、OLED検出を開始します。メイン処理で電源・Orionテレメトリー受信、IMU取得、OLED表示、UART入力・状態表示、ブザー時間管理を行います。制御入口はTIM6 IRQで500 Hz、UART状態表示はmainのp()で常時10 Hzを基準に実行します。電源指令の自動送信、アクチュエーター出力、CM4 SPIは実装していません。詳細は[基礎ドライバ](drivers.md)と[CAN・IMU・OLED](peripherals.md)を参照してください。
+AppはUART4デバッグ、ADCユーザーSW、両Classic CAN、IMU取得の状態管理、OLED検出を開始し、制御IRQ開始後に起動ブザーを2 kHz・100 ms鳴らします。メイン処理で電源・Orionテレメトリー受信、IMU取得、OLED表示、UART入力・状態表示、ブザー時間管理を行います。制御入口はTIM6 IRQで500 Hz、UART状態表示はmainのp()で常時10 Hzを基準に実行します。電源指令の自動送信、アクチュエーター出力、CM4 SPIは実装していません。詳細は[基礎ドライバ](drivers.md)と[CAN・IMU・OLED](peripherals.md)を参照してください。
 
-`Application/Board/board_gpio.c`には、名前付きデジタル入力の生レベル取得とLED端子のレベル設定を実装しています。起動処理からは呼び出しておらず、基板の動作確認は未実施です。[コード階層](architecture.md)に各層の責務、依存方向、旧世代の実装から整理する方針を定義しています。
+`Application/Board/board_gpio.c`には、名前付きデジタル入力の生レベル取得とLED端子のレベル設定を実装しています。LEDはHigh点灯の指定に従い、Appの起動シーケンスから使用します。[コード階層](architecture.md)に各層の責務、依存方向、旧世代の実装から整理する方針を定義しています。
 
 ## 実装時に決める事項
 
 - メイン制御の状態遷移、異常時の出力。周期はTIM6 IRQの500 Hzに確定
 - FDCANは旧Classic CAN転送仕様を基準にし、新機体の接続ノード・ID割当、送信周期、タイムアウトを決定
-- PHOTO_0/1とBATT_Vの取得方法・換算式・しきい値。U_BTNは旧HWと同じと指定され、旧5方向判定値を実装済み
+- PHOTO_0/1とBATT_Vの取得方法・しきい値。BATT_Vは10 kΩ/1 kΩ分圧の11倍換算とユーザー指定、ADC基準電圧・校正は未確定。U_BTNは旧5方向判定値を実装済み
 - ICM-20602の機体軸対応・校正・制御への受渡し。SPI1での識別・取得は実機確認済み
-- CM4通信に使用するSPIインスタンス・配線、master/slave関係、CSの極性と担当
+- CM4通信に使用するSPIインスタンス・配線、CSの極性と担当。STM32側slave・CM4側masterはユーザー指定により確定
 - CM4とのSPI通信速度、フレーム形式、指令・応答内容、更新周期、タイムアウト
 - ブザー以外のPWMの周波数・デューティ範囲・起動時の安全状態
 - LED極性、DIPの旧ビット順との対応、追加SWの用途。デバッグUARTはUART4に確定

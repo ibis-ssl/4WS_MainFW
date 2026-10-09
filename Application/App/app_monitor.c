@@ -3,6 +3,8 @@
 #include "Board/board_time.h"
 #include "Board/board_user_adc.h"
 #include "Board/board_control_timer.h"
+#include "Board/board_gpio.h"
+#include "Device/user_switch.h"
 #include "Device/imu.h"
 #include "Device/oled.h"
 #include "Device/orion_can.h"
@@ -73,11 +75,29 @@ void app_monitor_process(void)
     (void)oled_text(3, 0, line);
     (void)snprintf(line, sizeof(line), "AZ %d GZ %d", imu.raw_accel[2], imu.raw_gyro[2]);
     (void)oled_text(4, 0, line);
-    (void)snprintf(line, sizeof(line), "TEMP %ld MC", (long)(imu.temperature_c * 1000.0f));
+    /* GPIOはHigh=1/Low=0。DIPの並びはラベル順で、選択コードへの反転は行わない。 */
+    char dip[5] = {0}, extra[4] = {0}, buttons[6] = {0};
+    for (unsigned int i = 0; i < 4U; ++i) {
+        bool high;
+        dip[i] = board_gpio_read_input((board_gpio_input_t)(BOARD_GPIO_INPUT_DIP_0 + i), &high) ? (high ? '1' : '0') : '?';
+    }
+    const board_gpio_input_t inputs[] = {BOARD_GPIO_INPUT_SW_90, BOARD_GPIO_INPUT_SW_1, BOARD_GPIO_INPUT_SW_2};
+    for (unsigned int i = 0; i < 3U; ++i) {
+        bool high;
+        extra[i] = board_gpio_read_input(inputs[i], &high) ? (high ? '1' : '0') : '?';
+    }
+    /* 抵抗ラダーは独立GPIOではない。判定した押下方向だけ0、それ以外は1を表示する。
+     * 複数押下は識別せず、未取得・ADC異常時は各方向を?として示す。 */
+    user_switch_t key = user_switch_decode(sw.raw, app_monitor_status.sw_valid != 0U);
+    const user_switch_t directions[] = {USER_SWITCH_LEFT, USER_SWITCH_FORWARD, USER_SWITCH_RIGHT, USER_SWITCH_BACK, USER_SWITCH_CENTER};
+    for (unsigned int i = 0; i < 5U; ++i) {
+        buttons[i] = key == USER_SWITCH_INVALID ? '?' : (key == directions[i] ? '0' : '1');
+    }
+    (void)snprintf(line, sizeof(line), "DIP 0123 %s", dip);
     (void)oled_text(5, 0, line);
-    (void)snprintf(line, sizeof(line), "ORION %lu/%lu", (unsigned long)app_monitor_status.orion_rx[0], (unsigned long)app_monitor_status.orion_rx[1]);
+    (void)snprintf(line, sizeof(line), "SW  012  %s", extra);
     (void)oled_text(6, 0, line);
-    (void)snprintf(line, sizeof(line), "SW %u RAW %u", (unsigned)app_monitor_status.sw_valid, sw.raw);
+    (void)snprintf(line, sizeof(line), "BTN LTRBC %s", buttons);
     (void)oled_text(7, 0, line);
     (void)oled_commit();
 }

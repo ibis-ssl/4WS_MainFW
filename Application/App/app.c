@@ -51,7 +51,9 @@ bool app_init(void)
     report_ms = board_millis();
     startup_led_begin();
     app_monitor_init();
-    return board_control_timer_start(APP_CONTROL_FREQUENCY_HZ, app_control_step);
+    if (!board_control_timer_start(APP_CONTROL_FREQUENCY_HZ, app_control_step)) { return false; }
+    /* 起動通知だけを鳴らし、mainの時間管理で100 ms後にLowへ戻す。 */
+    return buzzer_start(2000U, 100U);
 }
 void app_process(void)
 {

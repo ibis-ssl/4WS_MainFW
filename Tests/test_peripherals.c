@@ -19,6 +19,9 @@ static unsigned int spi_writes, i2c_calls;
 /* App周期試験ではLEDの実端子を再現せず、出力呼出しだけを受理する。 */
 bool board_gpio_write_led_level(board_gpio_led_t led, bool high)
 { (void)high; assert((unsigned int)led < BOARD_GPIO_LED_COUNT); return true; }
+/* App試験では入力を開放Highとして扱い、実端子の押下は実機確認の対象とする。 */
+bool board_gpio_read_input(board_gpio_input_t input, bool *high)
+{ assert((unsigned int)input < BOARD_GPIO_INPUT_COUNT && high != NULL); *high = true; return true; }
 HAL_StatusTypeDef HAL_I2C_Init(I2C_HandleTypeDef *h)
 { assert(h == &hi2c1 && h->Init.Timing == 0xF0F1FFFFU); return HAL_OK; }
 HAL_StatusTypeDef HAL_I2CEx_ConfigAnalogFilter(I2C_HandleTypeDef *h, uint32_t value)
@@ -26,7 +29,12 @@ HAL_StatusTypeDef HAL_I2CEx_ConfigAnalogFilter(I2C_HandleTypeDef *h, uint32_t va
 HAL_StatusTypeDef HAL_I2CEx_ConfigDigitalFilter(I2C_HandleTypeDef *h, uint32_t value)
 { assert(h == &hi2c1 && value == 0U); return HAL_OK; }
 void HAL_GPIO_Init(void *port, GPIO_InitTypeDef *pins)
-{ assert(((port == GPIOB && pins->Pin == GPIO_PIN_7) || (port == GPIOA && pins->Pin == GPIO_PIN_15)) && pins->Pull == GPIO_PULLUP &&
+{
+    if (port == GPIOA && pins->Pin == GPIO_PIN_8) {
+        assert(pins->Pull == GPIO_PULLDOWN && pins->Mode == GPIO_MODE_AF_PP && pins->Alternate == GPIO_AF6_TIM1);
+        return;
+    }
+    assert(((port == GPIOB && pins->Pin == GPIO_PIN_7) || (port == GPIOA && pins->Pin == GPIO_PIN_15)) && pins->Pull == GPIO_PULLUP &&
     pins->Mode == GPIO_MODE_AF_OD && pins->Alternate == GPIO_AF4_I2C1); }
 HAL_StatusTypeDef HAL_SPI_Init(SPI_HandleTypeDef *h)
 { assert(h == &hspi1 && h->Init.BaudRatePrescaler == 32U); return HAL_OK; }

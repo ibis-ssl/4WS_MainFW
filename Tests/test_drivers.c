@@ -252,6 +252,7 @@ static void interrupt_adc_publish(void)
 static void test_app_periodic(void)
 {
     assert(app_init());
+    assert(timer.CCR1 != 0U && (timer.PSC + 1U) * (timer.ARR + 1U) == 85000U);
     assert(uart_transfers==0);
     adc_values[15]=501; HAL_ADC_ConvHalfCpltCallback(&hadc1);
     mock_dmb_hook=interrupt_adc_publish;
@@ -261,6 +262,8 @@ static void test_app_periodic(void)
         mock_tick=t;
         if (t%2U==0) { mock_ipsr=1; mock_tim6.SR=TIM_FLAG_UPDATE; TIM6_DAC_IRQHandler(); mock_ipsr=0; }
         app_process();
+        if (t < 100U) { assert(timer.CCR1 != 0U); }
+        else { assert(timer.CCR1 == 0U); }
         if (t%100U==0) { assert(uart_transfers==t/100U); HAL_UART_TxCpltCallback(&huart4); }
     }
     board_control_timer_stats_t s; board_control_timer_get_stats(&s); assert(s.calls==500);

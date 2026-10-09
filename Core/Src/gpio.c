@@ -60,8 +60,14 @@ void MX_GPIO_Init(void)
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(LED_1_GPIO_Port, LED_1_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : SW_90_Pin PC14 SW_2_Pin IMU_FSYNC_Pin */
-  GPIO_InitStruct.Pin = SW_90_Pin|GPIO_PIN_14|SW_2_Pin|IMU_FSYNC_Pin;
+  /*Configure GPIO pins : SW_90_Pin SW_1_Pin SW_2_Pin */
+  GPIO_InitStruct.Pin = SW_90_Pin|SW_1_Pin|SW_2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : IMU_FSYNC_Pin */
+  GPIO_InitStruct.Pin = IMU_FSYNC_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);

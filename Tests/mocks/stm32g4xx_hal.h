@@ -31,6 +31,9 @@ typedef struct { uint32_t Pin, Mode, Pull, Speed, Alternate; } GPIO_InitTypeDef;
 #define GPIO_PIN_8 256U
 #define GPIO_MODE_AF_OD 1U
 #define GPIO_PULLUP 1U
+#define GPIO_PULLDOWN 2U
+#define GPIO_MODE_AF_PP 2U
+#define GPIO_AF6_TIM1 6U
 #define GPIO_SPEED_FREQ_LOW 0U
 #define GPIO_AF4_I2C1 4U
 #define I2C_ANALOGFILTER_ENABLE 0U
