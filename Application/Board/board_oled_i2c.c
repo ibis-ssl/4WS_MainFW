@@ -5,11 +5,11 @@
 bool board_oled_i2c_init(void)
 {
     if (__get_IPSR() != 0U || HAL_RCC_GetPCLK1Freq() != 170000000U) { return false; }
-    /* 弱い内部プルアップで疎通確認するため、SCLを約20 kHzまで下げる。
-     * 170 MHz / 16を基準にHigh/Low各256カウント。立上り時間は実測未確認。
-     * 通常運用のI2C仕様適合は外部抵抗を追加して別途確認する。 */
+    /* PCLK1=170 MHz、アナログフィルター有効、DNF=0の400 kHz設定。
+     * 計算上の立上り100 ns・立下り10 nsは仮定で、内部プルアップの実波形は未測定。
+     * 段階的な実機転送試験に使用し、通常運用の仕様適合は波形で別途確認する。 */
     __HAL_I2C_DISABLE(&hi2c1);
-    hi2c1.Init.Timing = 0xF0F1FFFFU;
+    hi2c1.Init.Timing = 0x60400D28U;
     if (HAL_I2C_Init(&hi2c1) != HAL_OK ||
         HAL_I2CEx_ConfigAnalogFilter(&hi2c1, I2C_ANALOGFILTER_ENABLE) != HAL_OK ||
         HAL_I2CEx_ConfigDigitalFilter(&hi2c1, 0U) != HAL_OK) { return false; }

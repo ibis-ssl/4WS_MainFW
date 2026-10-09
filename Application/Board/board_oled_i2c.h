@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
-/* 外部プルアップ未実装の基板向け疎通確認。内部プルアップと低速設定を適用する。 */
+/* 外部プルアップ未実装の基板向け疎通確認。内部プルアップと400 kHz設定を適用する。 */
 bool board_oled_i2c_init(void);
 bool board_oled_i2c_probe(uint8_t address);
 bool board_oled_i2c_write(uint8_t address, bool data, const uint8_t *bytes, size_t length);

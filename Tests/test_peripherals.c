@@ -23,7 +23,7 @@ bool board_gpio_write_led_level(board_gpio_led_t led, bool high)
 bool board_gpio_read_input(board_gpio_input_t input, bool *high)
 { assert((unsigned int)input < BOARD_GPIO_INPUT_COUNT && high != NULL); *high = true; return true; }
 HAL_StatusTypeDef HAL_I2C_Init(I2C_HandleTypeDef *h)
-{ assert(h == &hi2c1 && h->Init.Timing == 0xF0F1FFFFU); return HAL_OK; }
+{ assert(h == &hi2c1 && h->Init.Timing == 0x60400D28U); return HAL_OK; }
 HAL_StatusTypeDef HAL_I2CEx_ConfigAnalogFilter(I2C_HandleTypeDef *h, uint32_t value)
 { assert(h == &hi2c1 && value == I2C_ANALOGFILTER_ENABLE); return HAL_OK; }
 HAL_StatusTypeDef HAL_I2CEx_ConfigDigitalFilter(I2C_HandleTypeDef *h, uint32_t value)
