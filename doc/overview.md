@@ -15,6 +15,17 @@ RoboCup SSL用ロボットの4輪ステアリング機体に搭載するメイ�
 
 モード一覧は現時点の要求例です。モード選択に使う入力、遷移条件、起動時のモード、切替時の出力処理は未確定です。CM4通信、フィードバック制御、モード切替は未実装です。基礎ドライバと[CAN・IMU・OLED](peripherals.md)の取得・診断機能を実装しています。実機検証は[開発手順](development.md)の記録と区別してください。
 
+## 通信仕様と実装状況
+
+| 対象 | 参照する契約・設計 | 本FWの状態 |
+|---|---|---|
+| CM4からの指令 | [共通コマンド](../specs/common/control_packet.md)、[4WSのモード・SPI設計案](../specs/proposals/control_modes.md) | 未実装。モードの採用設計と実際の受信・制御対応を区別する |
+| MainからCM4への帰還 | [共通128バイトfeedback](../specs/common/feedback_packet.md) | 採用設計あり。各項目の取得・格納、CRC生成、SPI送信は未実装 |
+| SPIの物理条件・転送手順 | [SPI設計案](../specs/proposals/control_modes.md#4ws-mainへのspi転送仮仕様) | STM32 slave・CM4 masterの要求あり。インスタンス、配線、CS、速度、周期、全二重転送・再同期は未確定 |
+| CAN機器通信 | [Orion CAN契約](../specs/common/orion_can.md) | Classic CAN転送、電源API、Orion受信解析を実装。対応範囲とDLC制約は[基礎ドライバ](drivers.md#電源基板)・[CAN受信](peripherals.md#can受信)を参照。4WSのノード・車輪割当は未確定 |
+
+共通feedbackの採用設計は、転送や制御の実装完了を示しません。現在のUART4ログ・SWD診断RAMは本repoの内部診断で、CM4向けfeedbackではありません。Orionの停止条件・UART・更新方式を4WSの確定仕様へ転用しません。文書の所有範囲は[管理境界](specs_migration.md)を参照してください。
+
 ## 旧世代ボードの参照先
 
 旧世代のプロジェクトは`C:\Users\hiroyuki\STM32CubeIDE\workspace_1.17.0\G474_Orion_main`です。
@@ -27,7 +38,7 @@ RoboCup SSL用ロボットの4輪ステアリング機体に搭載するメイ�
 | `Core/Src/ai_comm.c`、`Core/Inc/robot_packet.h` | 上位通信の処理とパケット定義 |
 | `Core/Src/state_func.c`、`Core/Src/robot_control.c` | モードごとの処理と制御の構成 |
 
-旧世代ではCM4との通信にUSART2を使用しています。今回のSPI通信への適用には仕様の再定義が必要です。2026-09-13の追加要求により、CAN、デバッグUART、ブザーPWM、ユーザーSWなど同等化できる部分は旧世代と同等仕様にする方針です。[ドライバ互換調査](driver_compatibility.md)に旧ソースの根拠と実装可能範囲を記録しています。モード番号、4WSのCAN機器割当、制御方式、ブートローダー構成は別途定義します。旧世代文書には更新時期による記述差があるため、移植時は該当ソースと照合します。
+旧世代ではCM4との通信にUSART2を使用しています。4WS向けの指令・帰還の採用設計と未確定のSPI転送手順は[通信仕様と実装状況](#通信仕様と実装状況)を参照してください。2026-09-13の追加要求により、CAN、デバッグUART、ブザーPWM、ユーザーSWなど同等化できる部分は旧世代と同等仕様にする方針です。[ドライバ互換調査](driver_compatibility.md)は旧ソースの調査履歴として保持します。4WSの操作モード、CAN機器割当、制御方式、ブートローダー構成は別途定義します。共通契約はspecsを参照し、移植時は該当ソースと照合します。
 
 ## 対象
 
@@ -75,7 +86,7 @@ AppはUART4デバッグ、ADCユーザーSW、両Classic CAN、IMU取得の状�
 - PHOTO_0/1とBATT_Vの取得方法・しきい値。BATT_Vは10 kΩ/1 kΩ分圧の11倍換算とユーザー指定、ADC基準電圧・校正は未確定。U_BTNは旧5方向判定値を実装済み
 - ICM-20602の機体軸対応・校正・制御への受渡し。SPI1での識別・取得は実機確認済み
 - CM4通信に使用するSPIインスタンス・配線、CSの極性と担当。STM32側slave・CM4側masterはユーザー指定により確定
-- CM4とのSPI通信速度、転送手順、共通コマンドの4WSでの適用範囲、応答内容、更新周期、タイムアウト。コマンド定義は[共通仕様](../specs/common/control_packet.md)を参照
+- CM4とのSPI通信速度、転送手順、更新周期、タイムアウト。指令・帰還の採用設計は[通信仕様と実装状況](#通信仕様と実装状況)を参照し、各項目の取得元・制御への反映と適合を確認する
 - ブザー以外のPWMの周波数・デューティ範囲・起動時の安全状態
 - DIPの表示位置とコードの対応、モード割当、追加SWの用途。LEDは全High点灯、デバッグUARTはUART4に確定
 

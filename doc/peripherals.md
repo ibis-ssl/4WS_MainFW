@@ -4,6 +4,8 @@
 
 ## CAN受信
 
+IDの用途とOrionの論理バス割当の正本は[Orion CAN契約](../specs/common/orion_can.md)。以下は本FWのデコーダー対応範囲と値の保持方法を示す。4WSの接続先・輪番号・操舵軸への割当と、契約に詳細がないDLC・バイト配置は別途照合する。
+
 `Protocol/orion_telemetry`がHALに依存せず復号し、`Device/orion_can`がバス別・ID別の最新値、受信時刻、受信回数を保持する。`app_process()`が電源受信処理と並行して渡す。既知IDは8 byte限定、floatはIEEE754 little-endian、NaN/Infは拒否。未知IDも転送層では受信するが、この解析層には格納しない。
 
 | ID | 格納する旧形式の値 |
