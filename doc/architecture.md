@@ -28,7 +28,7 @@
 - `Device`は`Board`と必要な`Protocol`に依存する。機器内の校正は担当するが、ロボット全体の姿勢推定・制御は`Control`へ置く。
 - `Control`と`Protocol`はHAL・GPIO・アプリの状態に依存しない。数値・構造体・バイト列を引数で受け渡す。
 - `Board`だけがユーザーコードから生成ヘッダーやHAL/LLを直接使用する。下位層から`App`や`Control`を直接呼ばない。
-- `Core/Src/main.c`は生成初期化と、将来追加する`app_init()`／`app_process()`の呼出しに留める。追加箇所はUSER CODEブロックを使う。
+- `Core/Src/main.c`は生成初期化と、実装済みの`app_init()`／`app_process()`の呼出しに留める。追加箇所はUSER CODEブロックを使う。
 
 全モジュール共通の`management.h`は設けない。型は所有するモジュールのヘッダーに定義し、全体状態を下位ドライバへ渡さない。共通処理は複数箇所で必要になった段階で小さな専用モジュールへ切り出す。
 
@@ -58,19 +58,19 @@ UARTの整形関数名は`p()`とし、main側で常時10 Hz実行する。`p()`
 | `ai_comm.c`、`robot_packet.h` | 通信形式は`Protocol`、通信状態と指令反映は`App` |
 | `control_*.c`、`odom.c`、`state_func.c` | 計算は`Control`、モードに応じた実行選択は`App` |
 
-旧世代と同等化できるCAN、デバッグUART、ブザー、ユーザーSWは同等仕様を採用する方針とする。[ドライバ互換調査](driver_compatibility.md)に実装可能範囲を定義する。旧CANパケットやボタン判定値は再現可能だが、新機体へのID割当・回路対応は確認する。IMU型番、CM4のSPI転送仕様、4WSの制御式は別途定義する。同等の機能を維持しつつ、容量制限、エラー処理、DMAバッファ所有など旧実装で不十分な部分は補う。
+旧世代と同等化できるCAN、デバッグUART、ブザー、ユーザーSWは同等仕様を採用する方針とする。[ドライバ互換調査](driver_compatibility.md)に調査時点の根拠を記録し、現在の実装仕様は[基礎ドライバ](drivers.md)と[CAN・IMU・OLED](peripherals.md)に記載する。新機体へのCAN ID割当は未確定。IMUはICM-20602として取得を実装済み。CM4のSPI転送仕様と4WSの制御式は別途定義する。同等の機能を維持しつつ、容量制限、エラー処理、DMAバッファ所有など旧実装で不十分な部分は補う。
 
-## 最初のドライバ実装
+## GPIOドライバ
 
 `board_gpio`は生成された`main.h`のピン定義を参照し、次を提供する。
 
-- DIP_0～3、SW_90、SW_2、IMU_FSYNCの生のHigh/Low取得。
+- DIP_0～3、SW_90、SW_1、SW_2、IMU_FSYNCの生のHigh/Low取得。
 - LED_0～3、LED_R/G/Bの端子へのHigh/Low書込み。
 - 不正なID・NULLの検出。エラー時はGPIO操作や読取り結果の書込みを行わない。
 
 `MX_GPIO_Init()`完了後に使用する。戻り値はAPI処理の成否で、端子の電気的な正常性は示さない。点灯・押下の極性、デバウンス、DIP値からモードへの変換は含まない。`U_BTN`はアナログ入力なので本APIの対象外。CM4_CS、SPI_IMU_CS、PWM、無名ピンも対象外。
 
-GPIO APIはビルド対象へ登録する。2026-10-08にAppからLED生レベル操作を使用する起動表示を追加した。Appが点灯極性と0→1→2→3→R→G→Bの順序を管理し、mainで切り替える。押下極性とLEDの実表示は別途確認する。
+GPIO APIはビルド対象へ登録済み。Appは全High点灯として、0→1→2→3→R→G→Bを各200 msで繰り返し、mainで切り替える。SW・DIPの回路上の極性は[ハードウェア](hardware.md#スイッチの対応とio設定)、LED出力の確認結果と目視未確認の範囲は[検証記録](development.md#動作中ledの繰り返し点灯2026-10-10)を参照する。
 
 CAN、UART4、ブザー、U_BTNの基礎ドライバは起動処理へ接続済み。GPIOのLED APIはAppの起動表示から操作する。ADC1の取得対象はU_BTNだけに変更した。SPI2スレーブに対してCM4_CSが出力である点は未解決で、CM4通信は未実装。
 

@@ -2,6 +2,22 @@
 
 プロジェクトルートをカレントディレクトリにしたWindows PowerShellで実行します。ソース、文書、スクリプトはUTF-8で保存します。
 
+## 共通仕様リポジトリ
+
+複数レイヤー・リポジトリにまたがる仕様は、`specs/`のGit submodule（`https://github.com/ibis-ssl/specs.git`）で参照します。新規取得時は次のコマンドを使用します。
+
+```powershell
+git clone --recurse-submodules https://github.com/ibis-ssl/4WS_MainFW.git
+```
+
+既存の作業コピーや親リポジトリの更新後は、プロジェクトルートで次を実行し、親リポジトリが記録したコミットを取得します。
+
+```powershell
+git submodule update --init --recursive
+```
+
+参照する仕様の版を変更する場合は、`specs/`内で対象コミットをcheckoutし、親リポジトリで`git add specs`して参照コミットの変更をコミットします。共通仕様の変更は仕様リポジトリ側で管理し、FW固有の実装状況・検証結果は本リポジトリの`doc/`へ記録します。submoduleの追加自体はFWの実装済み・実機検証済み範囲を変更しません。
+
 ## 必要なツール
 
 - CMake 3.22以降とNinja
@@ -123,6 +139,12 @@ python ./Script/test_drivers.py --cc "C:/Program Files/LLVM/bin/clang.exe"
 ビルド成功はコンパイル、リンク、bin／hex生成までを確認するものです。FDCAN、UART、SPI、I2C、ADC、PWMの電気的動作や接続機器との通信は保証しません。実機確認を行った場合は、基板、接続条件、FW成果物、確認内容を記録してください。
 
 ## 検証記録
+
+### 古い現状説明の整理（2026-10-20）
+
+- I2Cの旧20 kHz設定、電源以外のCAN受信を破棄する説明、LED極性・IMU型番・App接続を未確定／未実装とする記述を整理した。SW_1を含む現行GPIO入力一覧へ更新した。
+- specsのOrion／Atlas分離と共通コマンド定義に合わせ、管理境界の旧移管案を削除した。IO・周辺回路・ロボット内CAN形式は本repoで管理する。
+- 日付付き検証記録と旧ソース調査は履歴として保持した。文書内のローカルリンクと変更差分を確認。ソース・`.ioc`・生成コード・ビルド設定・specs内のファイルは変更せず、ビルド・実機試験は実行していない。
 
 ### VS Codeコードブラウズの修正（2026-10-10）
 

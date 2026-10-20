@@ -14,11 +14,11 @@
 | CM4との通信 | SPIを使用し、STM32側がslave、CM4側がmaster（2026-10-09ユーザー指定） | SPIインスタンス、CS、速度、通信形式 |
 | 操作入力 | ボタン操作によるアクチュエーター出力デバッグを行う。U_BTNは旧HW同等。DIPと追加SWの配線は下記の対応表を参照 | DIPと追加SWによるモード選択方法・操作仕様 |
 
-以降のピン・周辺機能表は設定済みの内容であり、接続HWの型番や用途の確定を意味しません。IMU、モータードライバー、その他のセンサーやサブ基板の詳細は追加定義が必要です。
+以降のピン・周辺機能表は設定済みの内容であり、接続HWの型番や用途の確定を意味しません。IMUはICM-20602、OLEDはSH1106として実装しています。機体軸対応や校正、モータードライバー、その他のセンサーやサブ基板の詳細は追加定義が必要です。
 
 ## ドライバ実装状況
 
-`Application/Board/board_gpio.c/.h`にDIP_0～3、SW_90、SW_2、IMU_FSYNCの生レベル取得と、LED_0～3・LED_R/G/Bの端子レベル設定を実装しています。生成された`main.h`のピン定義を利用し、入力はHigh/Low、出力はHigh/Low指定として扱います。LED APIはAppの起動表示から使用し、ユーザー指定により全LEDをHigh点灯として扱います。SWとDIPの回路上の極性は下記に記録しますが、APIは押下や選択値への変換を行いません。IMU_FSYNCの有効極性と各入力の用途は未確定です。
+`Application/Board/board_gpio.c/.h`にDIP_0～3、SW_90、SW_1、SW_2、IMU_FSYNCの生レベル取得と、LED_0～3・LED_R/G/Bの端子レベル設定を実装しています。生成された`main.h`のピン定義を利用し、入力はHigh/Low、出力はHigh/Low指定として扱います。LED APIはAppのLED循環表示から使用し、ユーザー指定により全LEDをHigh点灯として扱います。SWとDIPの回路上の極性は下記に記録しますが、APIは押下や選択値への変換を行いません。IMU_FSYNCの有効極性と各入力の用途は未確定です。
 
 Classic CAN、旧電源基板、UART4デバッグ、ブザー、U_BTN取得・判定を実装済みです。2026-10-08の接続情報に基づき、Orion CAN受信解析、SPI1のICM-20602取得、I2C1のSH1106表示を追加しました。CM4 SPIとアクチュエーター出力系は未実装です。[基礎ドライバ](drivers.md)と[CAN・IMU・OLED](peripherals.md)に実装仕様、[開発手順](development.md)に検証結果を記載しています。
 
@@ -120,7 +120,7 @@ U_BTNの複数押下は識別せず、ADC判定した方向だけ0にします�
 | ADC1 | IN3 U_BTN、12 bit、PCLK/4、連続、640.5 cycles、4倍平均、DMA1 Channel1循環 |
 | FDCAN1 | Normal、Classic、自動再送、1 Mbit/s |
 | FDCAN2 | Normal、Classic、自動再送、1 Mbit/s |
-| I2C1 | 7 bit address。生成初期値はFast mode指定・timing `0x40621236`。OLED疎通確認時にBoardが内部プルアップ・timing `0xF0F1FFFF`（約20 kHz）へ変更 |
+| I2C1 | 7 bit address、400 kHz設定、timing `0x60400D28`。`.ioc`・生成コード・Boardの値は一致。PB7/PA15の内部プルアップはBoardが実行時に適用 |
 | LPUART1 | 2,000,000 baud、8-N-1、flow controlなし |
 | UART4 | デバッグ、2,000,000 baud、8-N-1、TX DMA1 Channel2、RX 1 byte割り込み |
 | SPI1 | マスター、full duplex、8 bit、Mode 0、MSB first、software NSS。生成初期値10.625 Mbit/s、IMU開始時にBoardが5.3125 Mbit/sへ設定 |

@@ -2,7 +2,7 @@
 
 STM32G474RET6を使用するRoboCup SSL用4輪ステアリング機体のメイン制御ボード向けファームウェアです。STM32CubeMXが生成した初期化コードとCMakeプロジェクトを土台にしています。
 
-ochin-CM4v2にマウントされたCM4とSPIで通信し、機体内部の高速なフィードバック制御と単純なモード切替を担います。通常モードではCM4からのコマンドに従って動作し、出力デバッグモードではボタン操作でアクチュエーターを動かす方針です。通信形式や具体的な操作・出力条件は未確定です。
+ochin-CM4v2にマウントされたCM4とSPIで通信し、機体内部の高速なフィードバック制御と単純なモード切替を担います。通常モードではCM4からのコマンドに従って動作し、出力デバッグモードではボタン操作でアクチュエーターを動かす方針です。コマンド定義は[共通仕様](specs/common/control_packet.md)に従い、SPIの転送手順と具体的な操作・出力条件は未確定です。
 
 Classic CAN転送と旧電源基板通信、Orion形式のCANテレメトリー受信、ICM-20602の加速度・角速度・温度取得、SH1106（128x64）の診断表示、UART4デバッグ、Hz指定ブザー、旧HW互換のADCユーザーSWを実装しています。機体制御、CM4 SPI通信、アクチュエーター出力系は未実装です。
 
@@ -27,6 +27,7 @@ CAN、デバッグUART、ブザー、ユーザーSWなどは旧世代と同等�
 Windows PowerShellでプロジェクトルートから実行します。
 
 ```powershell
+git submodule update --init --recursive
 powershell -NoProfile -ExecutionPolicy Bypass -File ./Script/build.ps1 -Configuration Debug
 ```
 
@@ -34,11 +35,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./Script/build.ps1 -Configur
 
 ## 文書
 
+複数レイヤー・リポジトリにまたがる共通仕様は、`specs/`にsubmoduleとして配置した[ibis-ssl/specs](https://github.com/ibis-ssl/specs)へ統合します。[共通仕様の入口](specs/README.md)と[取得・更新手順](doc/development.md#共通仕様リポジトリ)を参照してください。このFW固有の実装状況や検証結果は、引き続き`doc/`に記録します。
+
 | 文書 | 内容 |
 |---|---|
+| [共通仕様との管理境界](doc/specs_migration.md) | specsとFW側の管理範囲、共通コマンドと未実装範囲 |
 | [概要](doc/overview.md) | ボードの役割、動作モード、旧世代の参照先、現在の実装状況 |
 | [コード階層](doc/architecture.md) | 責務・依存方向、旧世代からの整理、ドライバ実装方針 |
-| [ドライバ互換調査](doc/driver_compatibility.md) | CAN・UART・ブザー・SWなどの旧仕様と実装可能範囲 |
+| [ドライバ互換調査（履歴）](doc/driver_compatibility.md) | 2026-09-13時点の旧ソース調査。現在の仕様は基礎ドライバ・CAN・IMU・OLEDを参照 |
 | [基礎ドライバ](doc/drivers.md) | 現在の実装仕様、API、DMA・IRQの管理、ソフト検証 |
 | [CAN・IMU・OLED](doc/peripherals.md) | Orion受信形式、ICM-20602取得、SH1106診断表示、SWD読取り |
 | [ハードウェア](doc/hardware.md) | 周辺HWの定義、SW・DIPの回路図対応とIO設定、MCU・クロック・周辺機能の現行設定 |
