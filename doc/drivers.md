@@ -48,17 +48,16 @@ DWT CYCCNTを有効にし、制御コールバックの最大実行サイクル�
 
 `Protocol/power_packet`がバイト列、`Device/power_board`が両バスへの送信と受信状態を担当する。
 
-IDの用途は[Orion CAN契約](../specs/common/orion_can.md)を参照。下表は本FWのAPIと現在のエンコーダー・デコーダーが扱う内容を示す。契約に詳細がないパラメーター配置・DLCは相手機器との照合が必要で、本FWの実装だけで共通仕様を確定しない。
+バイト配置・パラメーターIDの正本は[電源指令](../specs/common/orion_can.md#電源指令)、受信する値の配置は[テレメトリー](../specs/common/orion_can.md#テレメトリー)を参照。ここではAPIの対応範囲と受理条件を記載する。
 
-| API／受信 | 内容 |
+| API／処理 | 対応範囲 |
 |---|---|
-| `power_board_set_on(bool)` | 0x010、byte0=0、byte1=ON/OFF、残り0 |
-| `power_board_set_param(param, value)` | 0x010、byte0=パラメーター、byte1～4=32 bit float little-endian、残り0 |
-| `power_board_request_reset()` | 0x001、先頭0x5A・0xA5、残り0 |
-| 0x215／0x216受信 | 電池電圧／キャパシター電圧、先頭float |
-| 0x224受信 | byte0=FET温度、byte1/2=コイル温度 |
+| `power_board_set_on(bool)` | 電源ON/OFF要求 |
+| `power_board_set_param(param, value)` | `power_param_t`で定義する保護パラメーターの設定要求 |
+| `power_board_request_reset()` | 電源リセット要求 |
+| `power_board_accept()` | 電源電圧・温度の受信を状態へ反映 |
 
-パラメーターは旧ID 1～5（最低電圧、最高電圧、最大電流、FET温度上限、コイル温度上限）。NaN・無限大・負値は送信しない。機器の許容上限や複数パラメーター間の整合はこのAPIで確定せず、上位が運用値を決める。
+NaN・無限大・負値と、`power_param_t`の範囲外を送信しない。機器の許容上限や複数パラメーター間の整合はこのAPIで確定せず、上位が運用値を決める。
 
 旧仕様どおり両バスへ送る。戻り値のbit0がCAN1、bit1がCAN2の受理を表し、3で両方受理、1/2で片側だけ受理、0で未受理。片側成功時の再送判断は呼出し側が行う。
 

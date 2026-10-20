@@ -11,7 +11,7 @@
 | 機体 | RoboCup SSL用の4輪ステアリング機体 | 駆動・操舵用アクチュエーター、ドライバー、フィードバックセンサーの構成 |
 | メイン制御ボード | 機体内の高速フィードバック制御と単純なモード切替を担当。TIM6で500 Hz | 制御演算・制御分担 |
 | 上位側HW | ochin-CM4v2にマウントされたCM4 | 接続コネクター、信号配線 |
-| CM4との通信 | SPIを使用し、STM32側がslave、CM4側がmaster（2026-10-09ユーザー指定）。指令・共通feedbackの採用設計は[概要](overview.md#通信仕様と実装状況)を参照 | SPIインスタンス、配線、CS、速度、転送手順・周期 |
+| CM4との通信 | 通信方式と役割・指令・帰還は[specsのSPI設計案](../specs/proposals/control_modes.md#4ws-mainへのspi転送仮仕様)を参照 | 未確定の通信条件はspecsで管理。現在のピン・生成設定との整合は下記「SPIとCS」で確認 |
 | 操作入力 | ボタン操作によるアクチュエーター出力デバッグを行う。U_BTNは旧HW同等。DIPと追加SWの配線は下記の対応表を参照 | DIPと追加SWによるモード選択方法・操作仕様 |
 
 以降のピン・周辺機能表は設定済みの内容であり、接続HWの型番や用途の確定を意味しません。IMUはICM-20602、OLEDはSH1106として実装しています。機体軸対応や校正、モータードライバー、その他のセンサーやサブ基板の詳細は追加定義が必要です。
@@ -151,6 +151,6 @@ PA0～PA3はアナログ設定ですが、regular conversionはADC1_IN3（PA2、
 
 ### SPIとCS
 
-CM4との通信ではSTM32側がslave、CM4側がmasterとユーザー指定されました。使用するSPIインスタンスと信号配線は未確定です。SPI1はIMU用のmasterで、SPI2は現状software NSSのslave設定です。CM4_CSはSTM32側のGPIO出力になっているため、その実際の役割、CSの駆動側と極性、フレーム境界の扱いは通信実装時に確認します。今回SPIの生成設定と`.ioc`は変更していません。
+CM4との通信条件・役割は[specsのSPI設計案](../specs/proposals/control_modes.md#4ws-mainへのspi転送仮仕様)を参照します。SPI1はIMU用のmasterで、SPI2は現状software NSSのslave設定です。CM4_CSはSTM32側のGPIO出力になっており、設計案を実装する際にピン・生成設定との対応を確認します。SPIの生成設定と`.ioc`は今回変更していません。
 
 SPI_IMU_CSとCM4_CSの生成初期レベルはLowです。IMUはBoard開始時にCSをHighへ戻し、SPI転送時だけLowにします。CM4_CSの役割と初期レベルはCM4通信仕様の確定時に確認します。

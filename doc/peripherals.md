@@ -4,21 +4,21 @@
 
 ## CAN受信
 
-IDの用途とOrionの論理バス割当の正本は[Orion CAN契約](../specs/common/orion_can.md)。以下は本FWのデコーダー対応範囲と値の保持方法を示す。4WSの接続先・輪番号・操舵軸への割当と、契約に詳細がないDLC・バイト配置は別途照合する。
+IDの用途・バイト配置・型・単位の正本は[Orion CAN契約](../specs/common/orion_can.md#テレメトリー)。以下は本FWのデコーダー対応範囲と値の保持方法を示す。4WSの接続先・輪番号・操舵軸への割当は[共通の未決事項](../specs/proposals/control_modes.md#実装前に確定する事項)として管理する。
 
-`Protocol/orion_telemetry`がHALに依存せず復号し、`Device/orion_can`がバス別・ID別の最新値、受信時刻、受信回数を保持する。`app_process()`が電源受信処理と並行して渡す。既知IDは8 byte限定、floatはIEEE754 little-endian、NaN/Infは拒否。未知IDも転送層では受信するが、この解析層には格納しない。
+`Protocol/orion_telemetry`がHALに依存せず共通契約の配置を復号し、`Device/orion_can`がバス別・ID別の最新値、受信時刻、受信回数を保持する。`app_process()`が電源受信処理と並行して渡す。既知IDは8 byte限定で、NaN/Infは拒否。未知IDも転送層では受信するが、この解析層には格納しない。
 
-| ID | 格納する旧形式の値 |
+| 対応ID | デコーダーの分類 |
 |---|---|
-| 0x000–001 | エラーID・情報（各uint16）、値（float） |
-| 0x200–204 | 回転数rps・エンコーダー角度rad（float各1） |
-| 0x210–216 | 電圧V（float、負値を拒否） |
-| 0x220–223 | モーター・ドライバー温度（float各1） |
-| 0x224 | FET・コイル2個の温度（各uint8） |
-| 0x230–234 | 電流（float） |
-| 0x240 | ボール検出2個（各uint8） |
-| 0x241 | マウスX/Y（int16）、品質（uint16） |
-| 0x500–503 | モーターパラメーター応答（float） |
+| 0x000–001 | `ORION_ERROR` |
+| 0x200–204 | `ORION_ENCODER` |
+| 0x210–216 | `ORION_VOLTAGE`（負値も拒否） |
+| 0x220–223 | `ORION_MOTOR_TEMP` |
+| 0x224 | `ORION_POWER_TEMP` |
+| 0x230–234 | `ORION_CURRENT` |
+| 0x240 | `ORION_BALL` |
+| 0x241 | `ORION_MOUSE` |
+| 0x500–503 | `ORION_PARAMETER` |
 
 旧コードの機体補正であるエンコーダー角度の符号反転は行わず、パケットの値を維持する。4WSの輪・基板へのID割当は別途確定する。`orion_can_read(bus, id, now, max_age_ms, &sample)`は最新値が指定年齢以内ならtrue。falseの場合も、有効な引数なら`received`で未受信と古い値を区別できる。受信状態はmain専用で、制御IRQへ直接渡していない。タイムアウト時の機体停止判断は今後実装する。アクチュエーター指令は自動送信しない。
 

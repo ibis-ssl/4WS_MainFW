@@ -20,6 +20,15 @@ git submodule update --init --recursive
 
 仕様の更新後は[管理境界](specs_migration.md)の照合コミット・参照リンクと、[通信仕様と実装状況](overview.md#通信仕様と実装状況)を確認します。Orion CANの契約はspecs、本FWの対応範囲・DLC差異は`doc/`に記載します。未実装案は`specs/proposals/`として区別し、仕様更新だけでFWが適合済みとは扱いません。
 
+specs内を編集するときは作業ブランチを作成します。機器間の契約・未決事項はspecsで更新し、FW側は参照と対応状況を更新します。
+
+```powershell
+# 作業ごとにブランチ名を決める
+git -C specs switch -c docs/4ws-spec-boundaries
+```
+
+specsの未コミット変更は親repoの参照コミットだけでは復元できません。共有するときはspecs側の変更をコミットし、そのコミットを親repoで記録します。設計案や契約へのリンクはsubmodule内への相対パスとし、mainの最新版へのリンクで参照版を迂回しません。
+
 ## 必要なツール
 
 - CMake 3.22以降とNinja
@@ -141,6 +150,12 @@ python ./Script/test_drivers.py --cc "C:/Program Files/LLVM/bin/clang.exe"
 ビルド成功はコンパイル、リンク、bin／hex生成までを確認するものです。FDCAN、UART、SPI、I2C、ADC、PWMの電気的動作や接続機器との通信は保証しません。実機確認を行った場合は、基板、接続条件、FW成果物、確認内容を記録してください。
 
 ## 検証記録
+
+### 共通仕様の集約と参照方向の整理（2026-10-20）
+
+- specsの作業ブランチ`docs/4ws-spec-boundaries`を作成し、電源指令・CANテレメトリーのバイト配置と照合範囲を共通仕様へ集約した。OrionMainと本FWの実ソースを照合し、DLC・相手機器との照合が未完了であることを区別した。
+- FW側の電源API・CAN解析の説明は共通仕様を参照し、APIの対応範囲・受理条件・実機観測との差異を残した。機器間の未決事項はspecsの設計案へ集約した。
+- specsとFWの文書で参照方向を明記し、日付付き試験・旧調査は履歴として保持した。ローカルリンク・見出し参照、UTF-8、差分を確認した。文書のみの変更であり、ビルド・実機試験は実行していない。
 
 ### specs更新後の文書整理（2026-10-20）
 
