@@ -28,9 +28,9 @@ def estimate(profile, rate, command_hz, feedback_hz, groups, power_fps,
         periodic = 10 * (classic_us(8) + fd_us(20, fd_rate)) + fd_us(12, fd_rate)
         calibration = 2 * math.ceil(calibration_bytes / 56) * fd_us(64, fd_rate)
     elif profile == 'classic16_pair':
-        # 固定小数点で2軸指令/帰還を各8byteに集約し、温度2軸を4byteへ詰める。
+        # 指令は目標と両上限を含む2軸8byte。独立制限パケットは送らない。
         steering = rate * 2 * classic_us(8)
-        periodic = 10 * (classic_us(8) + classic_us(8)) + classic_us(4)
+        periodic = 10 * classic_us(8) + classic_us(4)
         calibration = 2 * math.ceil(calibration_bytes / 4) * classic_us(8)
     else:
         # 既存案は指令/電流が各4byte、角度+速度が8byte。packedは角度+電流8byte。
