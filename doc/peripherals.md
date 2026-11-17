@@ -4,7 +4,7 @@
 
 ## CAN受信
 
-IDの用途・バイト配置・型・単位の正本は[Orion CAN契約](../specs/common/orion_can.md#テレメトリー)。以下は本FWのデコーダー対応範囲と値の保持方法を示す。4WSの接続先・輪番号・操舵軸への割当は[共通の未決事項](../specs/proposals/control_modes.md#実装前に確定する事項)として管理する。
+IDの用途・バイト配置・型・単位の正本は[Orion CAN契約](../specs/common/orion_can.md#テレメトリー)。以下は本FWのデコーダー対応範囲と値の保持方法を示す。AtlasのCAN接続先・バス・操舵軸への割当とwire形式案は[MainFWのCAN詳細](design/atlas_can.md)で管理する。上位の輪番号の意味・制御責務はspecsを参照し、接続仕様とは区別する。
 
 `Protocol/orion_telemetry`がHALに依存せず共通契約の配置を復号し、`Device/orion_can`がバス別・ID別の最新値、受信時刻、受信回数を保持する。`app_process()`が電源受信処理と並行して渡す。既知IDは8 byte限定で、NaN/Infは拒否。未知IDも転送層では受信するが、この解析層には格納しない。
 

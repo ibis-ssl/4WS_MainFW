@@ -1,51 +1,46 @@
 # 共通仕様との管理境界
 
-2026-10-20に、`specs`のコミット`42e4dcf9035f932648c8d05b7ee211650c081017`を基点とする作業ブランチ`docs/4ws-spec-boundaries`と合わせて整理した。管理方針の正本は[specsの更新ルール](../specs/README.md#文書の参照方向と更新ルール)と[仕様の所有](../specs/README.md#仕様の所有と未決事項)を参照する。
+2026-11-17に、specsとMain/ステアFWの記述範囲を整理した。以前の2026-10-20の整理から、AtlasのCAN接続詳細をMainFW所有へ変更した。
+判断基準は[specsの管理方針](../specs/README.md#新しい項目を置く際の判断基準)に従う。
 
 ## specsで管理する内容
 
-- Orion・Atlasのシステム構成とCM4–Main間の通信方式：[システム構成](../specs/common/system_overview.md)。
-- 共通コマンドのレイアウト、符号化、単位、フィールドの意味：[制御パケット](../specs/common/control_packet.md)。4WSへの拡張とSPI転送単位は[未実装の設計案](../specs/proposals/control_modes.md)を参照する。
-- MainからCM4へ返す共通128バイトの配置・CRC・単位：[フィードバックパケット](../specs/common/feedback_packet.md)。4WSでの採用設計とSPI転送の未実装範囲は[制御・通信の設計案](../specs/proposals/control_modes.md)を参照する。
-- OrionのMainとCANノード間の通信契約：[Orion CAN](../specs/common/orion_can.md)。4WSのノード・車輪・操舵軸への割当は本FWで未確定。
-- Orionの外部連携、制御・保護動作、更新契約：[対外仕様の入口](../specs/README.md#orionの対外仕様)。
+- AI・CM4・Main・周辺基板の役割と制御分担：[システム構成](../specs/common/system_overview.md)。
+- 上位指令の意味・単位・モード、CM4との転送：[制御パケット](../specs/common/control_packet.md)と[4WSのモード・SPI設計](../specs/proposals/control_modes.md)。
+- Main→CM4→PCの帰還値の意味・配置：[共通feedback](../specs/common/feedback_packet.md)。
+- システムの停止責務・校正情報の提供・電源互換：[Atlasの責務・互換設計](../specs/proposals/atlas_can.md)。
+- 既存Orion/電源の互換性の根拠：[Orion CAN](../specs/common/orion_can.md)と[MCU更新](../specs/common/firmware_update.md)。既存定義は変更しない。
 
-現行の通信契約は`common/`、未実装案は[proposals/](../specs/proposals/README.md)で管理する。[Atlasの記載範囲](../specs/common/system_overview.md#atlasの記載範囲)は本FWの実装への適合を保証しない。共通feedbackを含む通信契約への適合確認は今後の実装時に行い、Orionの停止条件・ブートローダーを本FWの実装済み仕様として扱わない。
+上位・システム契約とCAN接続方法を区別する。複数基板に影響するという理由だけで、CAN詳細をspecsへ複製しない。
+例えば「Mainが校正情報を利用できる」はspecs、「約1秒ごとのCAN転送」はMainFW、保存方法はステアFWで管理する。
 
-## 本リポジトリで管理する内容
+## MainFWで管理する内容
 
-| 内容 | 文書 |
+| 内容 | 正本/参照先 |
 |---|---|
-| 実装済み・未実装の範囲、起動処理 | [概要](overview.md) |
-| Board / Device / Protocol / Control / Appの責務と依存、IRQ・DMAの所有 | [コード階層](architecture.md)、[基礎ドライバ](drivers.md) |
-| IO割当、周辺回路、生成設定と実行時設定 | [ハードウェア](hardware.md) |
-| Orion CAN契約に対する実装の対応範囲・差異、電源API、デコーダーの受理条件、4WSの未確定事項 | [基礎ドライバ](drivers.md)、[CAN・IMU・OLED](peripherals.md) |
-| IMU/OLEDのドライバ、FW内部診断と同repoの読取りツール | [CAN・IMU・OLED](peripherals.md) |
-| ビルド・書込み・CubeMX再生成、日付付き検証記録、未確認範囲 | [開発手順](development.md) |
-| 旧ソースの調査根拠 | [ドライバ互換調査（履歴）](driver_compatibility.md) |
+| Atlas CAN ID・予約・基板/軸/バス割当 | [Atlas CAN詳細案](design/atlas_can.md)、[ID一覧CSV](design/atlas_can_ids.csv) |
+| Main―周辺基板のDLC・byte配置・opcode・CRC・分割・周期・帯域・校正転送 | 同上。まだID最終決定前・未実装 |
+| Mainの受理条件・Orion解析との対応差 | [CAN受信](peripherals.md#can受信)、[基礎ドライバ](drivers.md) |
+| ピン・HAL・DMA・IRQ・バッファ・モジュール・ビルド | [ハードウェア](hardware.md)、[コード階層](architecture.md)、[開発](development.md) |
+| 検証記録・旧実装調査 | [開発](development.md)、[互換調査](driver_compatibility.md) |
 
-## 本FWに残る制約
+ステアFWも同じCAN詳細を参照し、別のID表を手動で保守しない。共通の角度意味とCAN上の単位が異なる場合は、変換責務を接続仕様へ明記する。
+MainのCAN接続仕様がspecsにある上位・停止・互換性要件を変更する場合は、specs側も同時に更新する。
 
-- CM4 SPIは未実装。現行のCM4_CSはGPIO出力であり、specsの設計案と実装時に照合する。
-- 制御入口はTIM6の500 Hzで実装済み。4WSの制御演算、出力、モード遷移、通信断時の停止・復帰は未実装。
-- 現在のCAN解析はバス別・ID別に値を保持し、旧機体の角度符号反転を行わない。
-- 電源・Orion解析は8 byte限定。実機で受信した0x215/216のDLC=4は状態へ反映されず、0x244も解析対象外。相手側の送信定義を確認して対応範囲を決める。
-- CAN2の高負荷時RX破棄は未解決。測定条件と結果は[検証記録](development.md)を参照する。
+## 現在の実装差
 
-外部仕様を追加する場合はspecsへ対象機種と採用状況を明記し、本repoには対応する実装状況・制約・検証結果を残す。
-
-機器間の制御分担、SPI条件、4WSのCAN割当、操作モード、停止・復帰、帰還値の生成条件の未決事項は[specsの設計案](../specs/proposals/control_modes.md#実装前に確定する事項)へ集約する。本repoでは同じ仕様案を定義し直さない。
+- CM4 SPI、機体制御、アクチュエーター出力、運転モード遷移は未実装。Mainの制御入口は500 Hz。
+- Orion解析は8 byte限定、NaN/Inf拒否。実機で観測した0x215/216のDLC4や0x244は状態へ反映されない。ステア新形式は未実装。
+- CAN2高負荷時のRX破棄は未解決。詳細な検証状況は各実装文書で管理する。
+- Orionの停止条件・UART・ブートローダーをAtlasへ適合済みとして転用しない。
 
 ## 参照方向
 
 ```text
-本FWのREADME・doc → specsの通信契約／設計案 → specs内の共通定義
-本FWのdoc → 本FWのソース・設定・試験記録（実装確認）
-specsの目次・関連本文 → 本FWの実装文書（読者向けの案内）
+Main/ステアFW → specsの上位・責務・安全・互換性
+ステアFW → MainFWのCAN接続仕様
+specsの概要 → MainFWのCAN詳細へのリンク
+各FW → 自身の内部実装・操作・検証
 ```
 
-通信形式・単位・ID・機器間の振る舞いの規範はspecsを参照する。ソース・試験記録への参照は実装を確認するためのもので、共通契約の定義を委ねるものではない。specsからの案内リンクもこの依存方向を逆転させない。
-
-## 文書更新の扱い
-
-共通契約の配置・単位・ID定義はspecsを参照し、本repoではAPI・対応範囲・差異を説明する。specsに詳細が未定義の項目は、現在のソースで確認できる実装として記録し、機器全体の確定仕様にしない。日付付きの実機検証・旧ソース調査は履歴として保持する。
+規範を項目ごとに一つにし、具体的な値や表を複製しない。未実装案を現行実装と区別し、ID最終決定後に双方の実装と仕様を揃えて結合確認する。

@@ -17,6 +17,8 @@ RoboCup SSL用ロボットの4輪ステアリング機体に搭載するメイ�
 
 ## 通信仕様と実装状況
 
+AtlasのMain―周辺基板間の具体的なID・payload・周期・予約は[CAN詳細案](design/atlas_can.md)と[ID一覧CSV](design/atlas_can_ids.csv)で管理します。最終決定前の案であり、現行コードへの実装完了を示しません。
+
 | 対象 | 参照する契約・設計 | 本FWの状態 |
 |---|---|---|
 | CM4からの指令 | [共通コマンド](../specs/common/control_packet.md)、[4WSのモード・SPI設計案](../specs/proposals/control_modes.md) | 未実装。モードの採用設計と実際の受信・制御対応を区別する |
