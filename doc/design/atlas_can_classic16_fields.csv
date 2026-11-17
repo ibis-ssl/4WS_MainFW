@@ -1,0 +1,21 @@
+packet,dlc,offset,field,type,scale,unit,invalid_hex,notes
+angle_command,8,0,m0_target,i16,0.001,rad,0x8000,multi_turn
+angle_command,8,2,m1_target,i16,0.001,rad,0x8000,multi_turn
+angle_command,8,4,sequence,u16,1,count,,increments_each_transmission
+angle_command,8,6,axis_mask,u8,1,bits,,bits0_1_only; inactive_axis_target_must_be_zero
+angle_command,8,7,format_version,u8,1,version,,constant_1
+duty_command,8,0,m0_target,i16,0.0001,ratio,0x8000,operational_max_abs_0.8
+duty_command,8,2,m1_target,i16,0.0001,ratio,0x8000,operational_max_abs_0.8
+duty_command,8,4,sequence,u16,1,count,,increments_each_transmission
+duty_command,8,6,axis_mask,u8,1,bits,,bits0_1_only; inactive_axis_target_must_be_zero
+duty_command,8,7,format_version,u8,1,version,,constant_1
+feedback,8,0,m0_angle,i16,0.001,rad,0x8000,multi_turn
+feedback,8,2,m0_current,u16,0.001,A,0xFFFF,magnitude; never_clip_to_current_limit
+feedback,8,4,m1_angle,i16,0.001,rad,0x8000,multi_turn
+feedback,8,6,m1_current,u16,0.001,A,0xFFFF,magnitude; never_clip_to_current_limit
+limits,8,0,m0_current_limit,u16,0.001,A,0xFFFF,operational_max_2A
+limits,8,2,m0_duty_limit,u16,0.0001,ratio,0xFFFF,operational_max_0.8
+limits,8,4,m1_current_limit,u16,0.001,A,0xFFFF,operational_max_2A
+limits,8,6,m1_duty_limit,u16,0.0001,ratio,0xFFFF,operational_max_0.8
+temperature,4,0,m0_temperature,i16,0.1,degC,0x8000,sensor_specification_TBD
+temperature,4,2,m1_temperature,i16,0.1,degC,0x8000,sensor_specification_TBD

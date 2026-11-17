@@ -27,6 +27,11 @@ def estimate(profile, rate, command_hz, feedback_hz, groups, power_fps,
         steering = rate * (fd_us(12, fd_rate) + fd_us(feedback_size, fd_rate))
         periodic = 10 * (classic_us(8) + fd_us(20, fd_rate)) + fd_us(12, fd_rate)
         calibration = 2 * math.ceil(calibration_bytes / 56) * fd_us(64, fd_rate)
+    elif profile == 'classic16_pair':
+        # 固定小数点で2軸指令/帰還を各8byteに集約し、温度2軸を4byteへ詰める。
+        steering = rate * 2 * classic_us(8)
+        periodic = 10 * (classic_us(8) + classic_us(8)) + classic_us(4)
+        calibration = 2 * math.ceil(calibration_bytes / 4) * classic_us(8)
     else:
         # 既存案は指令/電流が各4byte、角度+速度が8byte。packedは角度+電流8byte。
         steering = rate * (2 * classic_us(4) +
@@ -69,7 +74,7 @@ def main():
     rows = [estimate(profile, rate, args.c610_command_hz, args.c610_feedback_hz,
                      args.c610_command_groups, args.power_fps, args.mouse_hz,
                      args.calibration_bytes_per_axis, args.configuration_fps)
-            for profile in ('classic_separate', 'classic_packed', 'fd_1m', 'fd_2m',
+            for profile in ('classic16_pair', 'classic_separate', 'classic_packed', 'fd_1m', 'fd_2m',
                             'fd_4m', 'fd_2m_velocity') for rate in (100, 250, 500)]
     if args.csv:
         writer = csv.DictWriter(sys.stdout, fieldnames=rows[0].keys(), lineterminator='\n')
@@ -81,7 +86,7 @@ def main():
             print(f"{row['profile']:22s} {row['steering_hz']:3d} {row['bus_a_percent']:9.2f}%"
                   f" {row['bus_b_power_percent']:12.2f}% {row['bus_b_power_mouse_percent']:18.2f}%")
         print('Unknown calibration/configuration excluded when byte/frame arguments are zero.')
-        print('FD coexistence assumed; FD times are engineering estimates, not ISO exact lengths.')
+        print('FD rows are historical comparisons, not the selected Classic profile; FD timing is approximate.')
 
 
 if __name__ == '__main__':

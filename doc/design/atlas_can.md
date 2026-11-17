@@ -4,6 +4,8 @@
 本書とID一覧CSVはMain―周辺基板間の接続仕様案の正本であり、MainFWで管理する。IDの最終決定はこれから行う。合意済み要求と追加候補を区別し、2026-11-18の通常動作時の送信レートを反映した。未定義のID・payload・個別の高速レートは後で追記する。実装済み仕様への移行はMainとステアの適合確認後に行う。
 既存契約は[Orion CAN](../../specs/common/orion_can.md)、[FW更新](../../specs/common/firmware_update.md)を参照する。
 
+**現在の推奨はClassic CAN 2.0B対応・標準11 bit・2軸固定小数点集約**。[数値表現とbyte配置](atlas_can_classic16.md)で角度・電流・Duty等の単位を選定した。既存2バスは維持し、FD用の追加分離は行えないためFD案は採用しない。送信側/受信側のFW変更は未実施。
+
 ## 1. 確定した要求
 
 - DualDCMotorDriver_V4を2基板使用し、各基板はローカル軸M0/M1を制御する。
@@ -19,10 +21,10 @@
 
 バスは2系統に分割し、Mainだけが両方へ接続する。一方はステア基板1台（2軸）＋C610×2、もう一方は同構成に電源基板を追加する。物理車輪位置とg、board_idとMainのFDCAN1/2の対応は別途確定する。
 
-## 2. ステアID表
+## 2. ID割当の初期案と最新形式の参照
 
 方向はMainを基準とする。確定要求以外の追加IDは候補であり、ロボット全体の予約と照合してから確定する。
-機械可読の索引は[ID一覧CSV](atlas_can_ids.csv)。payloadと採用条件は本書を参照する。
+以下と[ID一覧CSV](atlas_can_ids.csv)は初期の軸別float案の割当を示す比較資料。最新の送信形式は[Classic 2軸16 bit集約](atlas_can_classic16.md)と[フィールドCSV](atlas_can_classic16_fields.csv)を参照する。IDの軸別/基板別解釈も変わるため、ID最終決定時に一覧CSVを更新し、旧float形式と混在受理しない。
 CSVの`traffic_class`は送信階層、`period`はレート、`normal_periodic`は通常動作中の定期送信対象、`send_on_change`は変更時の追加送信を表す。ID未定の行は`status=unassigned`とし、`id_first/id_last`を空欄にする。
 
 ### 通常動作と制御用ID
@@ -153,8 +155,8 @@ Main・ステア・電源の結合確認済みを意味しない。実装上の�
 
 管理境界は[specsとの管理境界](../specs_migration.md)、上位の責務・互換性は[Atlasのシステム設計](../../specs/proposals/atlas_can.md)を参照する。
 
-## 9. 条件付きCAN FD案
+## 9. CAN FD案（非採用・比較履歴）
 
 現行Classic分離案とは別に、Main―ステア間を基板内2軸で集約する[FD ID候補](atlas_can_fd_ids.csv)と[フレーム/帯域の比較](atlas_can_bandwidth.md)を用意した。
-今回はユーザー指定によりC610/電源を含む同居バスでFDが使用可能な前提で検討する。Classic案とFD案は代替プロファイルであり、両方を同時に周期送信しない。
+これは同居ノードのFD耐性を仮定した以前の比較履歴である。後続のユーザー指定によりFDは採用せず、既存2バスのClassic CANを用いる。FD用IDを通常運用の採用IDとして予約しない。
 FD用IDの最終採用、調停/データ速度、20 byte最小帰還か角速度付き32 byte帰還か、具体的なpayloadの意味は未確定。FW設定やID一覧の現案を自動的にFDへ変更したものではない。
