@@ -1,0 +1,10 @@
+status,id_first,id_last,scope,direction,purpose,frame_type,payload_bytes,period,send_on_change,notes
+conditional_candidate,0x124,0x125,board,main-to-steering,paired_angle_target,CAN_FD,12,100-500Hz,false,board_id added to base; two axes; alternative to Classic per-axis commands
+conditional_candidate,0x134,0x135,board,main-to-steering,paired_duty_target,CAN_FD,12,100-500Hz,false,angle or duty according to mode; not simultaneous
+conditional_candidate,0x254,0x255,board,steering-to-main,paired_angle_current,CAN_FD,20,100-500Hz,false,minimum feedback; velocity extension to 32 bytes not yet selected
+conditional_candidate,0x334,0x335,board,main-to-steering,paired_current_duty_limits,CAN_FD,20,10Hz,true,two axes; alternative to Classic per-axis limits
+existing_candidate,0x350,0x351,board,main-to-steering,board_control,CLASSIC_CAN,8,10Hz,false,same existing candidate; not new reservation
+conditional_candidate,0x294,0x295,board,steering-to-main,paired_temperature,CAN_FD,12,1Hz,false,two axes; conversion and invalid semantics TBD
+conditional_candidate,0x604,0x605,board,steering-to-main,calibration_snapshot,CAN_FD,64,approximately_1Hz,false,whole snapshot each second; fragment header and exact DLC TBD; no request or ACK
+existing_common,0x000,0x000,robot,all-to-all,error,CLASSIC_CAN,8,event,false,preserve power-compatible format
+unassigned,,,TBD,steering-to-main,configuration_parameters,TBD,,1Hz,false,content and ID TBD

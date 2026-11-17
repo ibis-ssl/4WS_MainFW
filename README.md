@@ -41,6 +41,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./Script/build.ps1 -Configur
 
 | 文書 | 内容 |
 |---|---|
+| [Atlas CAN帯域・FD比較](doc/design/atlas_can_bandwidth.md) | 2バス構成の負荷、計算条件、FD集約のID候補。未実装 |
 | [共通仕様との管理境界](doc/specs_migration.md) | specsとFW側の管理範囲、共通コマンドと未実装範囲 |
 | [概要](doc/overview.md) | ボードの役割、動作モード、旧世代の参照先、現在の実装状況 |
 | [コード階層](doc/architecture.md) | 責務・依存方向、旧世代からの整理、ドライバ実装方針 |
