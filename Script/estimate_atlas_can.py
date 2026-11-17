@@ -28,9 +28,9 @@ def estimate(profile, rate, command_hz, feedback_hz, groups, power_fps,
         periodic = 10 * (classic_us(8) + fd_us(20, fd_rate)) + fd_us(12, fd_rate)
         calibration = 2 * math.ceil(calibration_bytes / 56) * fd_us(64, fd_rate)
     elif profile == 'classic16_pair':
-        # 指令は目標と両上限を含む2軸8byte。独立制限パケットは送らない。
+        # 指令は両上限込み2軸8byte。基板制御2byte/10Hz、温度4byteと初期校正8byte/1Hz。
         steering = rate * 2 * classic_us(8)
-        periodic = 10 * classic_us(8) + classic_us(4)
+        periodic = 10 * classic_us(2) + classic_us(4) + classic_us(8)
         calibration = 2 * math.ceil(calibration_bytes / 4) * classic_us(8)
     else:
         # 既存案は指令/電流が各4byte、角度+速度が8byte。packedは角度+電流8byte。
@@ -65,7 +65,8 @@ def main():
     parser.add_argument('--c610-command-groups', type=int, choices=(1, 2), default=1)
     parser.add_argument('--power-fps', type=int, default=90)
     parser.add_argument('--mouse-hz', type=int, default=1000)
-    parser.add_argument('--calibration-bytes-per-axis', type=int, default=0)
+    parser.add_argument('--calibration-bytes-per-axis', type=int, default=0,
+                        help='additional calibration bytes beyond the Classic paired initial-angle notification')
     parser.add_argument('--configuration-fps', type=int, default=0)
     parser.add_argument('--csv', action='store_true')
     args = parser.parse_args()
@@ -85,7 +86,7 @@ def main():
         for row in rows:
             print(f"{row['profile']:22s} {row['steering_hz']:3d} {row['bus_a_percent']:9.2f}%"
                   f" {row['bus_b_power_percent']:12.2f}% {row['bus_b_power_mouse_percent']:18.2f}%")
-        print('Unknown calibration/configuration excluded when byte/frame arguments are zero.')
+        print('Classic paired initial-angle notification included; additional calibration/configuration excluded at zero.')
         print('FD rows are historical comparisons, not the selected Classic profile; FD timing is approximate.')
 
 

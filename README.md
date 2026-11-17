@@ -37,11 +37,12 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./Script/build.ps1 -Configur
 
 複数レイヤー・リポジトリにまたがる通信契約は、submoduleの[共通仕様](specs/README.md)を参照します。未実装の4WS通信・制御案は[設計案](specs/proposals/README.md)、このFWの対応範囲・差異・内部実装・検証結果は`doc/`で管理します。[管理境界](doc/specs_migration.md)と[仕様の取得・更新手順](doc/development.md#共通仕様リポジトリ)を参照してください。
 
-上位・安全・互換性の契約はspecsを参照します。AtlasのCAN ID・payload・周期・バス割当は[本repoのCAN詳細案](doc/design/atlas_can.md)と[ID一覧](doc/design/atlas_can_ids.csv)を正本とし、ステアFW・specsから参照します。ID最終決定と実装はこれから行います。
+上位・安全・互換性の契約はspecsを参照します。AtlasのCAN ID・payload・周期・バス割当は[本repoのCAN詳細案](doc/design/atlas_can.md)と[ID一覧](doc/design/atlas_can_ids.csv)を正本とし、ステアFW・specsから参照します。主要IDと500 Hz周期・通信停止条件は確定し、基板制御と初期校正通知は具体案をレビューします。FW実装は未変更です。
 
 | 文書 | 内容 |
 |---|---|
 | [Atlas CAN帯域・FD比較](doc/design/atlas_can_bandwidth.md) | 2バス構成の負荷と計算条件。FD案は非採用の比較履歴 |
+| [状態・基板制御・校正通知案](doc/design/atlas_steering_control.md) | coast停止、通信復帰、HW故障ラッチ、SPI操舵角、具体的な要求状態と1 Hz通知の仮定義 |
 | [Classic 2軸16 bit集約](doc/design/atlas_can_classic16.md) | 現在の推奨形式。目標＋電流/Duty上限を2軸8 byteへ同送。版・sequence・maskなし。未実装 |
 | [共通仕様との管理境界](doc/specs_migration.md) | specsとFW側の管理範囲、共通コマンドと未実装範囲 |
 | [概要](doc/overview.md) | ボードの役割、動作モード、旧世代の参照先、現在の実装状況 |
