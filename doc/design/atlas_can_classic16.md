@@ -1,6 +1,8 @@
 # Atlas CAN：Classic 8 byte・2軸固定小数点形式
 
-2026-11-18。**ユーザー指示に基づく推奨パケット設計。未実装。**
+2026-11-18。**採用パケット設計。ステアFW実装・ホスト検証済み、Main/PC未対応・実機未確認。**
+
+2026-11-18実装状況：ステアFWは通常CAN・限定RTTを実装しホスト検証済み。MainとPCツールは未対応、実機結合は未確認。[ステア現行仕様](https://github.com/ibis-ssl/G474_SWCLDvier/blob/dev/dual_board/doc/can_protocol.md)を参照。
 CAN FDは採用せず、既存2バスを維持したClassic CANで帯域を減らす。CAN 2.0B対応として扱うが、既存IDとの整合とオーバーヘッドのため**標準11 bit IDを維持**する。29 bit拡張IDへの変更は今回行わない。
 Mainとステアの内部計算を16 bitへ落とすものではなく、通信境界だけで固定単位の整数へ変換する。
 割当と周期の入口は[CAN詳細](atlas_can.md)、機械可読のbyte配置は[フィールドCSV](atlas_can_classic16_fields.csv)。

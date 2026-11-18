@@ -8,10 +8,10 @@ confirmed_id,0x230,0x230,axis_pair,steering-to-main,spi_angle_current_feedback,h
 confirmed_id,0x232,0x232,axis_pair,steering-to-main,spi_angle_current_feedback,high,500Hz,true,false,first_axis=2; following odd ID unused; DLC8; SPI steering angle; current magnitude
 confirmed_id,0x290,0x290,axis_pair,steering-to-main,temperature,low,1Hz,true,false,first_axis=0; following odd ID unused; DLC4; NTC conversion and thresholds TBD
 confirmed_id,0x292,0x292,axis_pair,steering-to-main,temperature,low,1Hz,true,false,first_axis=2; following odd ID unused; DLC4; NTC conversion and thresholds TBD
-confirmed_id,0x350,0x350,axis_pair,main-to-steering,board_control,medium,10Hz,true,true,first_axis=0; following odd ID unused; provisional DLC2 requested states; send on change; timeout500ms
-confirmed_id,0x352,0x352,axis_pair,main-to-steering,board_control,medium,10Hz,true,true,first_axis=2; following odd ID unused; provisional DLC2 requested states; send on change; timeout500ms
-candidate_id,0x510,0x510,axis_pair,steering-to-main,spi_initial_calibration,low,approximately_1Hz,true,false,first_axis=0; 0x511 unused; provisional DLC8; initial SPI angles; other config flags; states; avoids existing update IDs
-candidate_id,0x512,0x512,axis_pair,steering-to-main,spi_initial_calibration,low,approximately_1Hz,true,false,first_axis=2; 0x513 unused; provisional DLC8; initial SPI angles; other config flags; states; avoids existing update IDs
+confirmed_id,0x350,0x350,axis_pair,main-to-steering,board_control,medium,10Hz,true,true,first_axis=0; following odd ID unused; DLC2 requested states; steering implemented; Main and PC pending; send on change; timeout500ms
+confirmed_id,0x352,0x352,axis_pair,main-to-steering,board_control,medium,10Hz,true,true,first_axis=2; following odd ID unused; DLC2 requested states; steering implemented; Main and PC pending; send on change; timeout500ms
+confirmed_id,0x510,0x510,axis_pair,steering-to-main,spi_initial_calibration,low,approximately_1Hz,true,false,first_axis=0; 0x511 unused; DLC8; steering implemented; Main and PC pending; initial SPI angles; other config flags; states; avoids existing update IDs
+confirmed_id,0x512,0x512,axis_pair,steering-to-main,spi_initial_calibration,low,approximately_1Hz,true,false,first_axis=2; 0x513 unused; DLC8; steering implemented; Main and PC pending; initial SPI angles; other config flags; states; avoids existing update IDs
 candidate,0x3D0,0x3D1,board,host-to-steering,diagnostics,debug,TBD,false,false,optional ID candidate; reply format and debug region TBD
 existing_reserved,0x480,0x4FF,robot,update,orion_update_data,update,event,false,false,do not allocate independent steering update IDs here
 existing_reserved,0x500,0x503,robot,steering-to-main,orion_motor_parameters,legacy,TBD,false,false,existing Orion parameter feedback; not available for Atlas calibration
