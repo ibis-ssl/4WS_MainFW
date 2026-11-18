@@ -1,10 +1,10 @@
 packet,dlc,offset,field,type,scale,unit,invalid_hex,notes
 angle_command,8,0,m0_target,i16,0.001,rad,0x8000,multi_turn
 angle_command,8,2,m0_current_limit,u8,0.01,A,0xFF,floor; operational_max_2A; zero_stops_axis
-angle_command,8,3,m0_duty_limit,u8,0.005,ratio,0xFF,floor; operational_max_0.8; zero_stops_axis
+angle_command,8,3,m0_duty_limit,u8,0.005,ratio,0xFF,floor; operational_max_1.0; default_1.0; zero_stops_axis
 angle_command,8,4,m1_target,i16,0.001,rad,0x8000,multi_turn
 angle_command,8,6,m1_current_limit,u8,0.01,A,0xFF,floor; operational_max_2A; zero_stops_axis
-angle_command,8,7,m1_duty_limit,u8,0.005,ratio,0xFF,floor; operational_max_0.8; zero_stops_axis
+angle_command,8,7,m1_duty_limit,u8,0.005,ratio,0xFF,floor; operational_max_1.0; default_1.0; zero_stops_axis
 duty_command,8,0,m0_target,i16,0.0001,ratio,0x8000,operational_max_abs_0.8
 duty_command,8,2,m0_current_limit,u8,0.01,A,0xFF,floor; operational_max_2A; zero_stops_axis
 duty_command,8,3,m0_duty_limit,u8,0.005,ratio,0xFF,floor; operational_max_0.8; zero_stops_axis
