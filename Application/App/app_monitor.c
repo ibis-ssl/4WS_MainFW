@@ -73,7 +73,8 @@ void app_monitor_process(void)
     } else {
         static const char *const states[] = {"", "WAIT", "READY", "STEER", "DRIVE", "INIT", "STOP", "FAULT"};
         const char *const targets[] = {"g0", "g1", "g2", "g3", "ALL"};
-        (void)snprintf(line, sizeof(line), "MOTOR %s %s", targets[motor.wheel], states[motor.state]);
+        const char *target = motor.state == MOTOR_DEBUG_DRIVE ? "ALL" : targets[motor.wheel];
+        (void)snprintf(line, sizeof(line), "MOTOR %s %s", target, states[motor.state]);
         (void)oled_text(0, 0, line);
     }
     for (unsigned int bus = 0; bus < 2U; ++bus) {
@@ -98,15 +99,14 @@ void app_monitor_process(void)
     /* 抵抗ラダーは独立GPIOではない。判定した押下方向だけ0、それ以外は1を表示する。
      * 複数押下は識別せず、未取得・ADC異常時は各方向を?として示す。 */
     user_switch_t key = user_switch_decode(sw.raw, app_monitor_status.sw_valid != 0U);
-    const user_switch_t directions[] = {USER_SWITCH_LEFT, USER_SWITCH_FORWARD, USER_SWITCH_RIGHT, USER_SWITCH_BACK, USER_SWITCH_CENTER};
     for (unsigned int i = 0; i < 5U; ++i) {
-        buttons[i] = key == USER_SWITCH_INVALID ? '?' : (key == directions[i] ? '0' : '1');
+        buttons[i] = key == USER_SWITCH_INVALID ? '?' : ((key & (1U << i)) != 0U ? '0' : '1');
     }
     (void)snprintf(line, sizeof(line), "DIP 0123 %s", dip);
     (void)oled_text(5, 0, line);
     (void)snprintf(line, sizeof(line), "SW  012  %s", extra);
     (void)oled_text(6, 0, line);
-    (void)snprintf(line, sizeof(line), "BTN LTRBC %s", buttons);
+    (void)snprintf(line, sizeof(line), "BTN CDRUL %s", buttons);
     (void)oled_text(7, 0, line);
     (void)oled_commit();
 }

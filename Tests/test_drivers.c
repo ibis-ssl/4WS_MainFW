@@ -192,6 +192,12 @@ static void test_adc_switch(void)
     for (unsigned int i=0; i<12; ++i) { assert(user_switch_decode(raw[i],true)==expect[i]); }
     assert(user_switch_decode(4096,true)==USER_SWITCH_INVALID);
     assert(user_switch_decode(0,false)==USER_SWITCH_INVALID);
+    assert(user_switch_decode(50, true) == 0x01);
+    assert(user_switch_decode(110, true) == 0x02);
+    assert(user_switch_decode(501, true) == 0x04);
+    assert(user_switch_decode(2400, true) == 0x08);
+    assert(user_switch_decode(3001, true) == 0x10);
+    assert(user_switch_decode(4095, true) == 0x00);
     mock_tick=UINT32_MAX-20; adc_values[15]=501; HAL_ADC_ConvHalfCpltCallback(&hadc1);
     mock_tick=20; assert(user_switch_read()==USER_SWITCH_RIGHT);
     mock_tick=200; assert(user_switch_read()==USER_SWITCH_INVALID);
@@ -375,6 +381,23 @@ static void assert_stop(unsigned int bus)
     assert(steer && steer->length == 2 && memcmp(steer->data, zero, 2) == 0);
 }
 
+static void assert_all_drive(int direction)
+{
+    for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
+        const board_can_frame_t *current = latest_tx(bus, 0x200);
+        assert(current && current->length == 8);
+        for (unsigned int slot = 0; slot < 4U; ++slot) {
+            const uint8_t *data = &current->data[2U * slot];
+            int16_t ma = (int16_t)((uint16_t)data[0] << 8 | data[1]);
+            if (slot / 2U == bus) {
+                assert(ma * direction >= 130 && ma * direction <= 500);
+            } else {
+                assert(ma == 0);
+            }
+        }
+    }
+}
+
 static void test_motor_debug(void)
 {
     assert(app_init());
@@ -403,6 +426,12 @@ static void test_motor_debug(void)
     assert(cancelled_buffers[0] != 0);
     assert_stop(0); assert_stop(1);
 
+    /* 操舵対象外の輪も校正・帰還がそろうまで全輪駆動を開始しない。 */
+    motor_ticks(35, 4095, true, 2);
+    motor_ticks(45, 2400, true, 2);
+    assert(app_motor_debug_status().state == MOTOR_DEBUG_WAIT);
+    assert_stop(0); assert_stop(1);
+
     for (unsigned int i = 0; i < 2; ++i) {
         motor_ticks(35, 4095, true, 3);
         mock_gpio_low |= 1UL << BOARD_GPIO_INPUT_SW_1;
@@ -413,12 +442,7 @@ static void test_motor_debug(void)
     assert(app_motor_debug_status().wheel == 2);
     motor_ticks(75, 110, true, 3);
     assert(app_motor_debug_status().state == MOTOR_DEBUG_DRIVE);
-    const board_can_frame_t *current = latest_tx(1, 0x200);
-    int16_t ma = (int16_t)((uint16_t)current->data[4] << 8 | current->data[5]);
-    assert(ma <= -130 && ma >= -500);
-    assert(current->data[0] == 0 && current->data[1] == 0 && current->data[2] == 0 &&
-           current->data[3] == 0 && current->data[6] == 0 && current->data[7] == 0);
-    assert_stop(0);
+    assert_all_drive(-1);
     motor_ticks(80, 110, false, 3);
     assert_stop(0); assert_stop(1);
     motor_ticks(60, 110, true, 3);
@@ -433,24 +457,11 @@ static void test_motor_debug(void)
     motor_ticks(35, 50, true, 3);
     assert_stop(1);
 
-    for (unsigned int i = 0; i < 2; ++i) {
-        motor_ticks(35, 4095, true, 3);
-        mock_gpio_low |= 1UL << BOARD_GPIO_INPUT_SW_1;
-        motor_ticks(32, 4095, true, 3);
-        mock_gpio_low = 3;
-    }
     motor_ticks(35, 4095, true, 3);
-    assert(app_motor_debug_status().wheel == 4);
+    assert(app_motor_debug_status().wheel == 2);
     motor_ticks(46, 2400, true, 3);
     assert(app_motor_debug_status().state == MOTOR_DEBUG_DRIVE);
-    for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
-        current = latest_tx(bus, 0x200);
-        unsigned int active = 4U * bus;
-        unsigned int unused = 4U - active;
-        assert(current->data[active + 1] != 0 && current->data[active + 3] != 0);
-        assert(current->data[unused] == 0 && current->data[unused + 1] == 0 &&
-               current->data[unused + 2] == 0 && current->data[unused + 3] == 0);
-    }
+    assert_all_drive(1);
     mock_gpio_low = 0;
     motor_ticks(35, 2400, true, 3);
     assert(app_motor_debug_status().state == MOTOR_DEBUG_OFF);
@@ -460,7 +471,14 @@ static void test_motor_debug(void)
     assert(app_motor_debug_status().state == MOTOR_DEBUG_WAIT);
     assert_stop(0); assert_stop(1);
 
+    for (unsigned int i = 0; i < 2; ++i) {
+        motor_ticks(35, 4095, true, 3);
+        mock_gpio_low |= 1UL << BOARD_GPIO_INPUT_SW_1;
+        motor_ticks(32, 4095, true, 3);
+        mock_gpio_low = 3;
+    }
     motor_ticks(35, 4095, true, 3);
+    assert(app_motor_debug_status().wheel == 4);
     motor_ticks(37, 3001, true, 3);
     angle = latest_tx(1, 0x122);
     const uint8_t target_left[8] = {0xFA,0xFE,50,40,0xFA,0xFE,50,40};

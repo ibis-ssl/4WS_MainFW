@@ -6,7 +6,8 @@
 #include <math.h>
 
 enum {
-    WHEEL_COUNT = 4, ALL_WHEELS = WHEEL_COUNT, DEBUG_MODE_CODE = 3,
+    WHEEL_COUNT = 4, ALL_WHEELS = WHEEL_COUNT, ALL_WHEEL_MASK = (1U << WHEEL_COUNT) - 1U,
+    DEBUG_MODE_CODE = 3,
     DEBOUNCE_MS = 30, ATLAS_PERIOD_MS = 2, STATE_PERIOD_MS = 100, DRIVE_PERIOD_MS = 10,
     ATLAS_TIMEOUT_MS = 150, CALIBRATION_TIMEOUT_MS = 2500, DRIVE_TIMEOUT_MS = 50,
     LOOP_TIMEOUT_MS = 100, INITIALIZE_TIMEOUT_MS = 30000,
@@ -43,7 +44,7 @@ static float ramped_rpm;
 /* CAN1は基板0とC610 ID 1/2、CAN2は基板1とC610 ID 3/4。 */
 static unsigned int selected_mask(void)
 {
-    return selected == ALL_WHEELS ? 0xFU : 1U << selected;
+    return selected == ALL_WHEELS ? ALL_WHEEL_MASK : 1U << selected;
 }
 
 static unsigned int board_mask(unsigned int bus)
@@ -70,7 +71,9 @@ bool app_motor_debug_accept(board_can_bus_t bus, const board_can_frame_t *frame)
         if (frame->length != 8U) { return true; }
         if (board->seen && !fresh(at, board->feedback_ms, ATLAS_TIMEOUT_MS)) {
             board->calibrated_message = false;
-            if ((selected_mask() & board_mask(bus)) != 0U) { interrupted = true; }
+            if (motion == MOTOR_DEBUG_DRIVE || (selected_mask() & board_mask(bus)) != 0U) {
+                interrupted = true;
+            }
         }
         atlas_decode_feedback(frame->data, board->axes);
         board->feedback_ms = at;
@@ -110,7 +113,7 @@ bool app_motor_debug_accept(board_can_bus_t bus, const board_can_frame_t *frame)
         }
         wheel_t *wheel = &wheels[index];
         bool continuous = wheel->samples != 0U && fresh(at, wheel->received_ms, DRIVE_TIMEOUT_MS);
-        if (motion == MOTOR_DEBUG_DRIVE && (selected_mask() & (1U << index)) != 0U &&
+        if (motion == MOTOR_DEBUG_DRIVE &&
             (!continuous || feedback.rpm > MAX_ROTOR_RPM || feedback.rpm < -MAX_ROTOR_RPM)) {
             interrupted = true;
         }
@@ -178,7 +181,8 @@ static void send_stops(uint32_t now)
 
 static bool motion_ready(motor_debug_state_t action, uint32_t now, bool starting)
 {
-    unsigned int mask = selected_mask();
+    /* 速度デバッグではSW9の操舵対象にかかわらず4輪を監視する。 */
+    unsigned int mask = action == MOTOR_DEBUG_DRIVE ? ALL_WHEEL_MASK : selected_mask();
     for (unsigned int i = 0; i < WHEEL_COUNT; ++i) {
         if ((mask & (1U << i)) == 0U) { continue; }
         const steering_t *board = &steering[i / 2U];
@@ -188,7 +192,7 @@ static bool motion_ready(motor_debug_state_t action, uint32_t now, bool starting
             return false;
         }
         if ((action != MOTOR_DEBUG_INIT || starting) && cal->state == 2U) { return false; }
-        if ((action == MOTOR_DEBUG_STEER || (action == MOTOR_DEBUG_DRIVE && selected == ALL_WHEELS)) &&
+        if ((action == MOTOR_DEBUG_STEER || action == MOTOR_DEBUG_DRIVE) &&
             (!cal->initialized || board->axes[i % 2U].angle_mrad == INT16_MIN)) { return false; }
         if (action == MOTOR_DEBUG_DRIVE) {
             const wheel_t *wheel = &wheels[i];
@@ -245,12 +249,10 @@ static bool send_drive(uint32_t now)
     last_drive = now;
     const float target = running_key == USER_SWITCH_FORWARD ? TARGET_ROTOR_RPM : -TARGET_ROTOR_RPM;
     ramped_rpm += clamp(target - ramped_rpm, 300.0f * dt);
-    unsigned int mask = selected_mask();
     for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
-        if ((mask & board_mask(bus)) == 0U) { continue; }
         uint8_t data[8] = {0};
         for (unsigned int i = 2U * bus; i < 2U * bus + 2U; ++i) {
-            if ((mask & (1U << i)) != 0U) { c610_encode_current(data, i, drive_current(&wheels[i], dt)); }
+            c610_encode_current(data, i, drive_current(&wheels[i], dt));
         }
         if (!board_can_send_immediate((board_can_bus_t)bus, 0x200U, data, 8)) { return false; }
     }

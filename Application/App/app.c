@@ -92,7 +92,7 @@ void app_process(void)
         board_control_timer_stats_t control;
         board_control_timer_get_stats(&control);
         /* 浮動小数点printfに依存せず、取得有効性とドライバ状態を確認できる。 */
-        (void)p("SW valid=%u raw=%u key=%u ADC errors=%lu; CAN rx=%lu/%lu drop=%lu/%lu busoff=%lu/%lu; CTRL calls=%lu overrun=%lu max_cycles=%lu delay_us=%lu; IMU who=%02lX valid=%lu samples=%lu err=%lu az=%ld gz=%ld; OLED addr=%02lX frames=%lu err=%lu\r\n",
+        (void)p("SW valid=%u raw=%u key_mask=%02X ADC errors=%lu; CAN rx=%lu/%lu drop=%lu/%lu busoff=%lu/%lu; CTRL calls=%lu overrun=%lu max_cycles=%lu delay_us=%lu; IMU who=%02lX valid=%lu samples=%lu err=%lu az=%ld gz=%ld; OLED addr=%02lX frames=%lu err=%lu\r\n",
             (unsigned)valid, (unsigned)sample.raw, (unsigned)user_switch_decode(sample.raw, valid),
             (unsigned long)board_user_adc_error_count(),
             (unsigned long)can1.rx_received, (unsigned long)can2.rx_received,
