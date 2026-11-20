@@ -9,3 +9,11 @@
 - 実基板のアプリ書込み・再起動、CRCと保存設定の照合、CM4のSPI経路は未確認。[実装・検証計画](../../implementation_plan.md)
 
 元データは `build/hardware/` の `atlas-fw-final-evidence-20261121.json`、`steer-update-id0-20261121.jsonl`、`steer-update-id1-20261121.jsonl`、`steer-update-can-20261121.json`。実行手順は[温度とステアFW更新](../../steer_fw_update.md)を参照する。
+
+## 失敗箇所の再調査
+
+同日、両バスを12秒間受信し、COM12ではC610のID 1・2、COM46ではID 3・4を各約1.2万件確認した。ステアの角度・校正・温度通知はどちらのバスでも0件だった。
+
+Mainを経由せずUSB-CANからも、保守offset 0／16の両方でID・Faultおよび更新情報・イメージ長・CRC・ハードウェアの読取りを行った。全照会が無応答。MainのRTTは `boot=2`、温度の受信マスク0を示した。前回の更新ログは、ステアのID照会段階のタイムアウトで、両軸基板とも書込み長0バイトだった。今回の採取では、更新開始、リセット、書込みは実行していない。
+
+この構成では更新プロトコルに入る前のステアCAN応答が得られていない。給電・物理経路・ステアFWの稼働状態のいずれかを確定できる計測は未実施。元データは `build/hardware/` の `steer-fw-diagnosis-20261121.json`、`steer-fw-diagnosis-passive-20261121.json`、`steer-fw-diagnosis-rtt-20261121.json`。
