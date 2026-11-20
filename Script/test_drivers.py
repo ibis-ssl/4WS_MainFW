@@ -18,6 +18,7 @@ if not compiler:
 out = root / 'build' / 'host-tests'
 out.mkdir(parents=True, exist_ok=True)
 sources = [
+    'Application/App/app_motor_debug.c', 'Application/Protocol/atlas_motor_packet.c',
     'Tests/test_peripherals.c', 'Application/App/app_monitor.c',
     'Application/Board/board_imu_spi.c', 'Application/Board/board_oled_i2c.c',
     'Application/Device/imu.c', 'Application/Device/oled.c',
@@ -37,3 +38,4 @@ subprocess.run([compiler, '-std=c11', '-Wall', '-Wextra', '-Werror',
 subprocess.run([str(exe)], check=True, cwd=out)
 subprocess.run([str(exe), 'app'], check=True, cwd=out)
 subprocess.run([str(exe), 'peripherals'], check=True, cwd=out)
+subprocess.run([str(exe), 'motor'], check=True, cwd=out)

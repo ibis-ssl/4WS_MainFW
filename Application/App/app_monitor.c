@@ -1,5 +1,6 @@
 /* 機器取得・表示はmainで行い、500 Hz制御IRQへ待機を持ち込まない。 */
 #include "App/app_monitor.h"
+#include "App/app_motor_debug.h"
 #include "Board/board_time.h"
 #include "Board/board_user_adc.h"
 #include "Board/board_control_timer.h"
@@ -17,11 +18,11 @@ void app_monitor_init(void)
     (void)oled_init();
     report_ms = retry_ms = board_millis();
 }
-void app_monitor_accept(board_can_bus_t bus, const board_can_frame_t *frame)
+void app_monitor_accept(board_can_bus_t bus, const board_can_frame_t *frame, bool decode_orion)
 {
     if ((unsigned int)bus >= BOARD_CAN_COUNT || frame == NULL) { return; }
     app_monitor_status.last_id[bus] = frame->id;
-    (void)orion_can_accept(bus, frame);
+    if (decode_orion) { (void)orion_can_accept(bus, frame); }
 }
 void app_monitor_process(void)
 {
@@ -66,7 +67,15 @@ void app_monitor_process(void)
     app_monitor_status.sequence++;
     if (!oled_begin()) { return; }
     char line[32];
-    (void)oled_text(0, 0, "4WS RX DIAGNOSTICS");
+    motor_debug_status_t motor = app_motor_debug_status();
+    if (motor.state == MOTOR_DEBUG_OFF) {
+        (void)oled_text(0, 0, "4WS RX DIAGNOSTICS");
+    } else {
+        static const char *const states[] = {"", "WAIT", "READY", "STEER", "DRIVE", "INIT", "STOP", "FAULT"};
+        const char *const targets[] = {"g0", "g1", "g2", "g3", "ALL"};
+        (void)snprintf(line, sizeof(line), "MOTOR %s %s", targets[motor.wheel], states[motor.state]);
+        (void)oled_text(0, 0, line);
+    }
     for (unsigned int bus = 0; bus < 2U; ++bus) {
         (void)snprintf(line, sizeof(line), "CAN%u RX %lu", bus + 1U, (unsigned long)app_monitor_status.can_rx[bus]);
         (void)oled_text((uint8_t)(bus + 1U), 0, line);

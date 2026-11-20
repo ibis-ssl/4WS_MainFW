@@ -11,20 +11,20 @@ RoboCup SSL用ロボットの4輪ステアリング機体に搭載するメイ�
 | モード | 要求される動作 | 未確定事項 |
 |---|---|---|
 | 通常モード | CM4からのコマンドを受け付けて動作する | [共通の設計案・未決事項](../specs/proposals/control_modes.md#実装前に確定する事項)を参照 |
-| アクチュエーター出力デバッグモード | ボタン操作でアクチュエーターを動かす | 同上 |
+| モーターデバッグ | SW7のコード3で、ボタンからAtlasの初期化・角度指令・C610速度指令を操作する | [操作と実機確認](atlas_bringup.md#モーターデバッグの操作) |
 
-モード一覧は現時点の要求例です。モード選択に使う入力、遷移条件、起動時のモード、切替時の出力処理は未確定です。CM4通信、フィードバック制御、モード切替は未実装です。基礎ドライバと[CAN・IMU・OLED](peripherals.md)の取得・診断機能を実装しています。実機検証は[開発手順](development.md)の記録と区別してください。
+モーターデバッグへの出入りと停止処理を実装済みです。通常動作のCM4通信と機体制御は未実装です。基礎ドライバと[CAN・IMU・OLED](peripherals.md)の取得・診断機能の実機検証は[開発手順](development.md)に記録しています。
 
 ## 通信仕様と実装状況
 
-AtlasのMain―周辺基板間の具体的なID・payload・周期・予約は[CAN詳細案](design/atlas_can.md)と[ID一覧CSV](design/atlas_can_ids.csv)で管理します。ステア基板とPCは通常CANを実装済みで、Main側のAtlas/C610制御は未実装です。[結合開発](atlas_bringup.md)に確認結果、車輪割当と開発順序を記載します。採用形式は[Classic 2軸16 bit集約](design/atlas_can_classic16.md)。[帯域・FD比較](design/atlas_can_bandwidth.md)のFD案は非採用の比較履歴です。
+AtlasのMain―周辺基板間の具体的なID・payload・周期・予約は[CAN詳細案](design/atlas_can.md)と[ID一覧CSV](design/atlas_can_ids.csv)で管理します。Mainのモーターデバッグは[Classic 2軸16 bit集約](design/atlas_can_classic16.md)を使います。設定したバス・車輪割当と実機確認項目は[結合開発](atlas_bringup.md)を参照してください。
 
 | 対象 | 参照する契約・設計 | 本FWの状態 |
 |---|---|---|
 | CM4からの指令 | [共通コマンド](../specs/common/control_packet.md)、[4WSのモード・SPI設計案](../specs/proposals/control_modes.md) | 未実装。モードの採用設計と実際の受信・制御対応を区別する |
 | MainからCM4への帰還 | [共通128バイトfeedback](../specs/common/feedback_packet.md) | 採用設計あり。各項目の取得・格納、CRC生成、SPI送信は未実装 |
 | SPIの物理条件・転送手順 | [SPI設計案](../specs/proposals/control_modes.md#4ws-mainへのspi転送仮仕様) | 未実装。生成設定のSPI2はslave、CM4_CSはGPIO出力のため、設計案との対応確認が必要 |
-| CAN機器通信 | [Orion CAN契約](../specs/common/orion_can.md) | Classic CAN転送、電源API、Orion受信解析を実装。対応範囲とDLC制約は[基礎ドライバ](drivers.md#電源基板)・[CAN受信](peripherals.md#can受信)を参照。[ステアID/C610の論理割当](atlas_bringup.md#バスと車輪)を確認済み。物理ポート・車輪位置は結合時に照合 |
+| CAN機器通信 | [Orion CAN契約](../specs/common/orion_can.md)・[Atlas CAN](design/atlas_can.md) | Classic CAN転送、Atlas/C610のデバッグ制御、CAN1電源API、Orion受信解析を実装。[バス割当](atlas_bringup.md#バスと車輪)の実配線・車輪位置は結合時に照合 |
 
 共通feedbackの採用設計は、転送や制御の実装完了を示しません。現在のUART4ログ・SWD診断RAMは本repoの内部診断で、CM4向けfeedbackではありません。Orionの停止条件・UART・更新方式を4WSの確定仕様へ転用しません。文書の所有範囲は[管理境界](specs_migration.md)を参照してください。
 
@@ -77,7 +77,7 @@ AtlasのMain―周辺基板間の具体的なID・payload・周期・予約は[C
 
 `main()`はHALとクロックを初期化し、GPIO、ADC1、FDCAN1/2、I2C1、LPUART1、UART4、SPI1/2、TIM1/2/3、CORDICの初期化関数を呼び出します。その後、USER CODEから`app_init()`を呼び、`while (1)`で`app_process()`を繰り返します。
 
-AppはUART4デバッグ、ADCユーザーSW、両Classic CAN、IMU取得の状態管理、OLED検出を開始し、制御IRQ開始後に起動ブザーを2 kHz・100 ms鳴らします。メイン処理で電源・Orionテレメトリー受信、IMU取得、OLED表示、UART入力・状態表示、ブザー時間管理を行います。制御入口はTIM6 IRQで500 Hz、UART状態表示はmainのp()で常時10 Hzを基準に実行します。電源指令の自動送信、アクチュエーター出力、CM4 SPIは実装していません。詳細は[基礎ドライバ](drivers.md)と[CAN・IMU・OLED](peripherals.md)を参照してください。
+AppはUART4デバッグ、ADCユーザーSW、両Classic CAN、IMU取得の状態管理、OLED検出を開始し、制御IRQ開始後に起動ブザーを2 kHz・100 ms鳴らします。メイン処理でCAN受信の振り分け、モーターデバッグ、IMU取得、OLED表示、UART入力・状態表示、ブザー時間管理を行います。通常制御用のTIM6 IRQ入口は500 Hz、UART状態表示はmainのp()で10 Hzです。電源指令は明示要求時だけ送信するAPIを提供します。[基礎ドライバ](drivers.md) · [CAN・IMU・OLED](peripherals.md)
 
 `Application/Board/board_gpio.c`には、名前付きデジタル入力の生レベル取得とLED端子のレベル設定を実装しています。LEDはHigh点灯の指定に従い、Appの起動シーケンスから使用します。[コード階層](architecture.md)に各層の責務、依存方向、旧世代の実装から整理する方針を定義しています。
 

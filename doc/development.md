@@ -155,6 +155,11 @@ python ./Script/test_drivers.py --cc "C:/Program Files/LLVM/bin/clang.exe"
 
 ## 検証記録
 
+### Mainのモーターデバッグ（2026-11-20）
+
+- Debug／Releaseの`Script/build.ps1 -Configuration <構成> -Rebuild`と`python ./Script/test_drivers.py`が成功した。HALモックを使い、コード3への出入り、押したままの起動抑止、単輪と四輪の選択、操舵と初期化、C610の正負方向と未使用スロット、ボタン解放と帰還断での0 A／coast、共通エラーの両バス停止を確認した。
+- 実機への書き込み・駆動は未実施。SW7の目盛とコード、実車輪の位置・正方向、電源基板を含めたCAN負荷と停止遅延は[結合手順](atlas_bringup.md#実装条件と実機確認)の確認項目。
+
 ### 共通仕様の集約と参照方向の整理（2026-10-20）
 
 - specsの作業ブランチ`docs/4ws-spec-boundaries`を作成し、電源指令・CANテレメトリーのバイト配置と照合範囲を共通仕様へ集約した。OrionMainと本FWの実ソースを照合し、DLC・相手機器との照合が未完了であることを区別した。

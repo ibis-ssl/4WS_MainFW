@@ -19,9 +19,14 @@ static unsigned int spi_writes, i2c_calls;
 /* App周期試験ではLEDの実端子を再現せず、出力呼出しだけを受理する。 */
 bool board_gpio_write_led_level(board_gpio_led_t led, bool high)
 { (void)high; assert((unsigned int)led < BOARD_GPIO_LED_COUNT); return true; }
-/* App試験では入力を開放Highとして扱い、実端子の押下は実機確認の対象とする。 */
+uint32_t mock_gpio_low;
+/* App試験では入力ごとに閉成を指定する。 */
 bool board_gpio_read_input(board_gpio_input_t input, bool *high)
-{ assert((unsigned int)input < BOARD_GPIO_INPUT_COUNT && high != NULL); *high = true; return true; }
+{
+    assert((unsigned int)input < BOARD_GPIO_INPUT_COUNT && high != NULL);
+    *high = (mock_gpio_low & (1UL << input)) == 0;
+    return true;
+}
 HAL_StatusTypeDef HAL_I2C_Init(I2C_HandleTypeDef *h)
 { assert(h == &hi2c1 && h->Init.Timing == 0x60400D28U); return HAL_OK; }
 HAL_StatusTypeDef HAL_I2CEx_ConfigAnalogFilter(I2C_HandleTypeDef *h, uint32_t value)

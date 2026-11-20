@@ -41,13 +41,15 @@ bool power_packet_reset(uint8_t data[8])
 }
 bool power_packet_decode(uint16_t id, const uint8_t *data, uint8_t length, power_packet_value_t *value)
 {
-    if (data == NULL || value == NULL || length != 8U) { return false; }
+    if (data == NULL || value == NULL) { return false; }
     power_packet_value_t result = {0};
     if (id == 0x215U || id == 0x216U) {
+        if (length != 4U && length != 8U) { return false; }
         result.kind = id == 0x215U ? POWER_RX_BATTERY : POWER_RX_CAPACITOR;
         result.voltage = get_float(data);
         if (!isfinite(result.voltage) || result.voltage < 0.0f) { return false; }
     } else if (id == 0x224U) {
+        if (length != 8U) { return false; }
         result.kind = POWER_RX_TEMPERATURE;
         result.fet_temp = data[0]; result.coil_temp[0] = data[1]; result.coil_temp[1] = data[2];
     } else { return false; }

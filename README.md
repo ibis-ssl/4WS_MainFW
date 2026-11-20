@@ -4,7 +4,9 @@ STM32G474RET6を使用するRoboCup SSL用4輪ステアリング機体のメイ�
 
 ochin-CM4v2にマウントされたCM4とSPIで通信し、機体内部の高速なフィードバック制御と単純なモード切替を担います。通常モードではCM4からのコマンドに従って動作し、出力デバッグモードではボタン操作でアクチュエーターを動かす方針です。指令は共通コマンド、帰還は共通128バイトfeedbackを採用する[設計案](specs/proposals/control_modes.md)があります。SPIの転送手順と具体的な操作・出力条件は未確定で、[通信仕様と実装状況](doc/overview.md#通信仕様と実装状況)に整理しています。
 
-Classic CAN転送と旧電源基板通信、Orion形式のCANテレメトリー受信、ICM-20602の加速度・角速度・温度取得、SH1106（128x64）の診断表示、UART4デバッグ、Hz指定ブザー、旧HW互換のADCユーザーSWを実装しています。機体制御、CM4 SPI通信、アクチュエーター出力系は未実装です。
+Classic CAN転送と旧電源基板通信、Orion形式のCANテレメトリー受信、ICM-20602の加速度・角速度・温度取得、SH1106（128x64）の診断表示、UART4デバッグ、Hz指定ブザー、旧HW互換のADCユーザーSWを実装しています。モーターデバッグモードではMain上のボタンからAtlas操舵とC610の速度制御を行えます。通常モードの機体制御とCM4 SPI通信は未実装です。
+
+モードスイッチSW7のコードを **3** に設定し、ボタンを一度すべて離します。SW9で対象を `g0 → g1 → g2 → g3 → ALL` と切り替え、中央で操舵初期化、左右で操舵、上下で車輪を回します。操作はボタンを押している間だけ有効です。CAN1にステア基板ID 0、C610 ID 1・2、電源基板を接続し、CAN2にステア基板ID 1、C610 ID 3・4を接続します。[操作と確認手順](doc/atlas_bringup.md#モーターデバッグの操作)
 
 CANはVIO修正後の2026-10-09に両バスの実機受信とOrion形式の解析を確認しました。CAN2では受信キュー満杯による破棄が継続しており、負荷時の取りこぼし対策が残っています。OLEDはSDA=PB7・SCL=PA15（J18-3）で、内部プルアップのまま50→100→200→400 kHzへ段階的に上げ、400 kHz設定で60秒間の画面転送エラー0・約10回/秒の更新を確認しました。現在は400 kHz設定です。実際のSCL周波数・立上り時間の波形確認は未実施です。IMUは実機取得を確認済みです。
 
@@ -14,7 +16,7 @@ CANはVIO修正後の2026-10-09に両バスの実機受信とOrion形式の解�
 
 追加SW（PC13～15）は内部プルアップを設定済みです。OLEDの下3行にDIP_0～3、SW_0～2、5方向ボタン（LTRBC）を1/0表示します。1は開放/非押下、0は閉成/押下、ADC無効時は`?`です。詳細は[スイッチ仕様](doc/hardware.md#ディスプレイのスイッチ表示)を参照してください。
 
-機体制御の入口はTIM6割り込みから500 Hz（2 ms）で直接実行します。UART4の状態表示はmainの`p()`で整形し、入力操作なしで常時10 Hz出力します。制御演算・アクチュエーター出力は今後この制御入口へ追加します。
+通常モードの機体制御用入口はTIM6割り込みから500 Hz（2 ms）で呼びます。モーターデバッグの周期処理とUART4の10 Hz状態表示はメインループで実行します。
 
 ユーザーコードは`Application/`に配置します。実装仕様とAPIは[基礎ドライバ](doc/drivers.md)、追加機器は[CAN・IMU・OLED](doc/peripherals.md)、配置方針は[コード階層](doc/architecture.md)を参照してください。電源指令は自動送信せず、起動ブザーを2 kHzで100 ms鳴らした後、出力をLowへ戻します。実機検証の結果と未確認範囲は[開発手順](doc/development.md)に記録します。
 
@@ -37,14 +39,14 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./Script/build.ps1 -Configur
 
 複数レイヤー・リポジトリにまたがる通信契約は、submoduleの[共通仕様](specs/README.md)を参照します。未実装の4WS通信・制御案は[設計案](specs/proposals/README.md)、このFWの対応範囲・差異・内部実装・検証結果は`doc/`で管理します。[管理境界](doc/specs_migration.md)と[仕様の取得・更新手順](doc/development.md#共通仕様リポジトリ)を参照してください。
 
-上位・安全・互換性の契約はspecsを参照します。AtlasのCAN ID・payload・周期・バス割当は[本repoのCAN詳細案](doc/design/atlas_can.md)と[ID一覧](doc/design/atlas_can_ids.csv)を正本とし、ステアFW・specsから参照します。ステア基板とPC側で通常CANを実装し、2基板・C610混在で動作確認を進めました。Main側はAtlas/C610制御の実装前です。構成、確認結果、結合に向けた順序は[Atlas／C610結合開発](doc/atlas_bringup.md)を参照してください。
+上位・安全・互換性の契約はspecsを参照します。AtlasのCAN ID・payload・周期・バス割当は[本repoのCAN詳細案](doc/design/atlas_can.md)と[ID一覧](doc/design/atlas_can_ids.csv)を正本とし、ステアFW・specsから参照します。ステア基板とPC側で2基板・C610混在を確認し、Main側にはモーターデバッグを実装しました。Mainとの実機結合は未検証です。[Atlas／C610結合開発](doc/atlas_bringup.md)を参照してください。
 
 | 文書 | 内容 |
 |---|---|
 | [Atlas／C610結合開発](doc/atlas_bringup.md) | 2バスの割当、ステア側の確認結果、Main実装の着手順、CANキャプチャ診断 |
 | [Atlas CAN帯域・FD比較](doc/design/atlas_can_bandwidth.md) | 2バス構成の負荷と計算条件。FD案は非採用の比較履歴 |
 | [状態・基板制御・校正通知案](doc/design/atlas_steering_control.md) | coast停止、通信復帰、HW故障ラッチ、SPI操舵角、要求状態と1 Hz通知の実装済み形式 |
-| [Classic 2軸16 bit集約](doc/design/atlas_can_classic16.md) | 現在の推奨形式。目標＋電流/Duty上限を2軸8 byteへ同送。版・sequence・maskなし。ステア／PC実装済み、Main未対応 |
+| [Classic 2軸16 bit集約](doc/design/atlas_can_classic16.md) | 目標＋電流/Duty上限を2軸8 byteへ同送。Mainのデバッグでは角度指令を使用 |
 | [共通仕様との管理境界](doc/specs_migration.md) | specsとFW側の管理範囲、共通コマンドと未実装範囲 |
 | [概要](doc/overview.md) | ボードの役割、動作モード、旧世代の参照先、現在の実装状況 |
 | [コード階層](doc/architecture.md) | 責務・依存方向、旧世代からの整理、ドライバ実装方針 |

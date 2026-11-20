@@ -47,6 +47,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # ユーザーコードはCubeMX生成先から分離し、対象ファイルを明示する。
     Application/App/app.c
     Application/App/app_monitor.c
+    Application/App/app_motor_debug.c
     Application/App/app_control.c
     Application/Board/board_buzzer.c
     Application/Board/board_can.c
@@ -66,6 +67,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Application/Device/user_switch.c
     Application/Device/user_switch_board.c
     Application/Protocol/power_packet.c
+    Application/Protocol/atlas_motor_packet.c
     Application/Protocol/orion_telemetry.c
 )
 

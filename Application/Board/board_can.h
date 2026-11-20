@@ -19,6 +19,10 @@ typedef struct {
 bool board_can_init(void);
 /* 8 byteをコピーして受理する。trueは送信完了・相手機器の応答を意味しない。 */
 bool board_can_send(board_can_bus_t bus, uint16_t id, const uint8_t data[8]);
+/* 周期指令をソフトFIFOに溜めず、ハードウェアが受理できるときだけ投入する。 */
+bool board_can_send_immediate(board_can_bus_t bus, uint16_t id, const uint8_t data[8], uint8_t length);
+/* 停止時に未送信の周期指令を取り消す。送信が始まったフレームは相手に届く場合がある。 */
+void board_can_cancel_immediate(board_can_bus_t bus);
 bool board_can_receive(board_can_bus_t bus, board_can_frame_t *frame);
 bool board_can_get_stats(board_can_bus_t bus, board_can_stats_t *stats);
 /* 一時的なHAL送信失敗後もFIFOを再処理する。bus-off解除は自動実施しない。 */

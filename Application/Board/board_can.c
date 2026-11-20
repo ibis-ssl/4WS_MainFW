@@ -14,6 +14,7 @@ typedef struct {
     board_can_frame_t tx[CAN_QUEUE_SIZE], rx[CAN_QUEUE_SIZE];
     uint8_t tx_head, tx_tail, rx_head, rx_tail;
     board_can_stats_t stats;
+    uint32_t immediate_buffers;
     bool started;
 } can_state_t;
 static can_state_t states[BOARD_CAN_COUNT];
@@ -25,24 +26,32 @@ static int bus_index(FDCAN_HandleTypeDef *handle)
     for (int i = 0; i < BOARD_CAN_COUNT; ++i) { if (handles[i] == handle) { return i; } }
     return -1;
 }
+static bool submit(unsigned int bus, uint16_t id, const uint8_t *data, uint8_t length, bool immediate)
+{
+    can_state_t *s = &states[bus];
+    FDCAN_TxHeaderTypeDef header = {
+        .Identifier = id, .IdType = FDCAN_STANDARD_ID, .TxFrameType = FDCAN_DATA_FRAME,
+        .DataLength = length, .ErrorStateIndicator = FDCAN_ESI_ACTIVE,
+        .BitRateSwitch = FDCAN_BRS_OFF, .FDFormat = FDCAN_CLASSIC_CAN,
+        .TxEventFifoControl = FDCAN_NO_TX_EVENTS, .MessageMarker = 0,
+    };
+    if (HAL_FDCAN_AddMessageToTxFifoQ(handles[bus], &header, data) != HAL_OK) {
+        s->stats.tx_errors++;
+        return false;
+    }
+    uint32_t buffer = HAL_FDCAN_GetLatestTxFifoQRequestBuffer(handles[bus]);
+    if (immediate) { s->immediate_buffers |= buffer; }
+    else { s->immediate_buffers &= ~buffer; }
+    s->stats.tx_submitted++;
+    return true;
+}
 /* 呼出し側がIRQとの排他を取る。ハードウェアFIFOの空き分だけ処理する。 */
 static void drain(unsigned int bus)
 {
     can_state_t *s = &states[bus];
-    FDCAN_TxHeaderTypeDef header = {
-        .IdType = FDCAN_STANDARD_ID, .TxFrameType = FDCAN_DATA_FRAME,
-        .DataLength = FDCAN_DLC_BYTES_8, .ErrorStateIndicator = FDCAN_ESI_ACTIVE,
-        .BitRateSwitch = FDCAN_BRS_OFF, .FDFormat = FDCAN_CLASSIC_CAN,
-        .TxEventFifoControl = FDCAN_NO_TX_EVENTS, .MessageMarker = 0,
-    };
     while (s->tx_tail != s->tx_head && HAL_FDCAN_GetTxFifoFreeLevel(handles[bus]) > 0U) {
         board_can_frame_t *frame = &s->tx[s->tx_tail];
-        header.Identifier = frame->id;
-        if (HAL_FDCAN_AddMessageToTxFifoQ(handles[bus], &header, frame->data) != HAL_OK) {
-            s->stats.tx_errors++;
-            break;
-        }
-        s->stats.tx_submitted++;
+        if (!submit(bus, frame->id, frame->data, FDCAN_DLC_BYTES_8, false)) { break; }
         s->tx_tail = next(s->tx_tail);
     }
 }
@@ -104,6 +113,28 @@ bool board_can_send(board_can_bus_t bus, uint16_t id, const uint8_t data[8])
     drain(bus);
     board_critical_exit(lock);
     return true;
+}
+bool board_can_send_immediate(board_can_bus_t bus, uint16_t id, const uint8_t data[8], uint8_t length)
+{
+    if ((unsigned int)bus >= BOARD_CAN_COUNT || id > 0x7FFU || data == NULL || length > 8U) { return false; }
+    uint32_t lock = board_critical_enter();
+    can_state_t *s = &states[bus];
+    bool sent = s->started && HAL_FDCAN_GetTxFifoFreeLevel(handles[bus]) > 0U &&
+        submit(bus, id, data, length, true);
+    if (!sent && s->started) { s->stats.tx_dropped++; }
+    board_critical_exit(lock);
+    return sent;
+}
+void board_can_cancel_immediate(board_can_bus_t bus)
+{
+    if ((unsigned int)bus >= BOARD_CAN_COUNT) { return; }
+    uint32_t lock = board_critical_enter();
+    can_state_t *s = &states[bus];
+    uint32_t pending = s->immediate_buffers;
+    if (pending != 0U && HAL_FDCAN_IsTxBufferMessagePending(handles[bus], pending)) {
+        (void)HAL_FDCAN_AbortTxRequest(handles[bus], pending);
+    }
+    board_critical_exit(lock);
 }
 bool board_can_receive(board_can_bus_t bus, board_can_frame_t *frame)
 {

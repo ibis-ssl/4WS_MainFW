@@ -12,6 +12,6 @@ typedef struct {
 } app_monitor_status_t;
 extern volatile app_monitor_status_t app_monitor_status;
 void app_monitor_init(void);
-void app_monitor_accept(board_can_bus_t bus, const board_can_frame_t *frame);
+void app_monitor_accept(board_can_bus_t bus, const board_can_frame_t *frame, bool decode_orion);
 void app_monitor_process(void);
 #endif

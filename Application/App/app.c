@@ -1,6 +1,6 @@
 /*
  * 起動時に受信とSW取得を開始し、UART4で読取り専用の状態表示を提供する。
- * 電源APIは明示要求用とし、自動送信やボタンからの出力操作は行わない。
+ * モーターデバッグの入出力は専用モジュールで管理する。電源指令は明示要求時に限る。
  */
 #include "App/app.h"
 #include "Board/board_can.h"
@@ -14,6 +14,7 @@
 #include "Board/board_control_timer.h"
 #include "Board/board_time.h"
 #include "App/app_monitor.h"
+#include "App/app_motor_debug.h"
 #include "Board/board_gpio.h"
 
 static uint32_t report_ms;
@@ -63,10 +64,14 @@ void app_process(void)
     for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
         board_can_frame_t frame;
         for (unsigned int n = 0; n < 20U && board_can_receive((board_can_bus_t)bus, &frame); ++n) {
-            (void)power_board_accept((board_can_bus_t)bus, &frame);
-            app_monitor_accept((board_can_bus_t)bus, &frame);
+            bool motor_frame = app_motor_debug_accept((board_can_bus_t)bus, &frame);
+            if (!motor_frame) {
+                (void)power_board_accept((board_can_bus_t)bus, &frame);
+            }
+            app_monitor_accept((board_can_bus_t)bus, &frame, !motor_frame);
         }
     }
+    app_motor_debug_process();
     uint8_t byte;
     for (unsigned int n = 0; n < 32U && board_debug_uart_read(&byte); ++n) {
         /* 入力で定期出力を増速しない。操作コマンドは今後Appで定義する。 */

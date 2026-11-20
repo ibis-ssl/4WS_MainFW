@@ -1,31 +1,28 @@
-/* 旧仕様どおり両CANバスへ電源管理指令を送り、部分的な送信受理も呼出し側へ返す。 */
+/* 電源基板の接続先をCAN1に固定し、旧形式の電源管理指令を送る。 */
 #include "Device/power_board.h"
 #include <stddef.h>
 static power_board_status_t statuses[BOARD_CAN_COUNT];
-static uint8_t send_both(uint16_t id, const uint8_t data[8])
+static uint8_t send_power(uint16_t id, const uint8_t data[8])
 {
-    uint8_t mask = 0;
-    if (board_can_send(BOARD_CAN_1, id, data)) { mask |= 1U; }
-    if (board_can_send(BOARD_CAN_2, id, data)) { mask |= 2U; }
-    return mask;
+    return board_can_send(BOARD_CAN_1, id, data) ? 1U : 0U;
 }
 uint8_t power_board_set_on(bool on)
 {
-    uint8_t data[8]; power_packet_on(on, data); return send_both(0x010, data);
+    uint8_t data[8]; power_packet_on(on, data); return send_power(0x010, data);
 }
 uint8_t power_board_set_param(power_param_t param, float value)
 {
     uint8_t data[8];
     if (!power_packet_param(param, value, data)) { return 0; }
-    return send_both(0x010, data);
+    return send_power(0x010, data);
 }
 uint8_t power_board_request_reset(void)
 {
-    uint8_t data[8]; power_packet_reset(data); return send_both(0x001, data);
+    uint8_t data[8]; power_packet_reset(data); return send_power(0x001, data);
 }
 bool power_board_accept(board_can_bus_t bus, const board_can_frame_t *frame)
 {
-    if ((unsigned int)bus >= BOARD_CAN_COUNT || frame == NULL) { return false; }
+    if (bus != BOARD_CAN_1 || frame == NULL) { return false; }
     power_packet_value_t value;
     if (!power_packet_decode(frame->id, frame->data, frame->length, &value)) { return false; }
     power_board_status_t *s = &statuses[bus];

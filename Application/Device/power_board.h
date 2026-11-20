@@ -9,11 +9,11 @@ typedef struct {
     uint8_t fet_temp, coil_temp[2];
     uint32_t battery_ms, capacitor_ms, temperature_ms;
 } power_board_status_t;
-/* 戻り値bit0/1はCAN1/2の送信受理。3でもACK・機器動作完了を意味しない。 */
+/* 戻り値bit0はCAN1での送信受理。ACK・機器動作完了は別に確認する。 */
 uint8_t power_board_set_on(bool on);
 uint8_t power_board_set_param(power_param_t param, float value);
 uint8_t power_board_request_reset(void);
-/* 受信はバスごとに保持。validは受信済みであって最新性を保証しない。 */
+/* CAN1の受信だけを状態に反映する。validは受信済みを表す。 */
 bool power_board_accept(board_can_bus_t bus, const board_can_frame_t *frame);
 bool power_board_get_status(board_can_bus_t bus, power_board_status_t *status);
 #endif

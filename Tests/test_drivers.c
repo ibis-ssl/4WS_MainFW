@@ -13,6 +13,9 @@
 #include "Device/power_board.h"
 #include "App/app.h"
 #include "App/app_control.h"
+#include "App/app_motor_debug.h"
+#include "Board/board_gpio.h"
+#include "Device/orion_can.h"
 #include "Board/board_control_timer.h"
 #include "Board/board_critical.h"
 #include <assert.h>
@@ -34,6 +37,7 @@ ADC_HandleTypeDef hadc1;
 static TIM_TypeDef timer;
 TIM_HandleTypeDef htim1 = {.Instance=&timer};
 static unsigned int can_free[2], can_sent_count[2], rx_count[2], rx_position[2];
+static uint32_t latest_buffer[2], pending_buffers[2], cancelled_buffers[2];
 static bool fail_can_tx, fail_uart_tx, fail_uart_rx, fail_start;
 static board_can_frame_t sent[2][256], incoming[2][64];
 static FDCAN_RxHeaderTypeDef rx_header_override;
@@ -58,13 +62,27 @@ HAL_StatusTypeDef HAL_FDCAN_Stop(FDCAN_HandleTypeDef *h) { (void)h; return HAL_O
 HAL_StatusTypeDef HAL_FDCAN_ActivateNotification(FDCAN_HandleTypeDef *h, uint32_t a, uint32_t b)
 { (void)h; (void)a; (void)b; return HAL_OK; }
 uint32_t HAL_FDCAN_GetTxFifoFreeLevel(FDCAN_HandleTypeDef *h) { return can_free[h->index]; }
-HAL_StatusTypeDef HAL_FDCAN_AddMessageToTxFifoQ(FDCAN_HandleTypeDef *h, FDCAN_TxHeaderTypeDef *header, uint8_t *data)
+HAL_StatusTypeDef HAL_FDCAN_AddMessageToTxFifoQ(FDCAN_HandleTypeDef *h, const FDCAN_TxHeaderTypeDef *header, const uint8_t *data)
 {
     if (fail_can_tx) { return HAL_ERROR; }
     assert(can_free[h->index] > 0);
-    assert(header->DataLength == 8 && header->FDFormat == FDCAN_CLASSIC_CAN && header->IdType == FDCAN_STANDARD_ID);
+    assert(header->DataLength <= 8 && header->FDFormat == FDCAN_CLASSIC_CAN && header->IdType == FDCAN_STANDARD_ID);
     board_can_frame_t *f = &sent[h->index][can_sent_count[h->index]++];
-    f->id = (uint16_t)header->Identifier; memcpy(f->data, data, 8); can_free[h->index]--;
+    f->id = (uint16_t)header->Identifier;
+    f->length = (uint8_t)header->DataLength;
+    memcpy(f->data, data, f->length);
+    latest_buffer[h->index] = 1U << (can_sent_count[h->index] % 3U);
+    can_free[h->index]--;
+    return HAL_OK;
+}
+uint32_t HAL_FDCAN_GetLatestTxFifoQRequestBuffer(const FDCAN_HandleTypeDef *h)
+{ return latest_buffer[h->index]; }
+uint32_t HAL_FDCAN_IsTxBufferMessagePending(const FDCAN_HandleTypeDef *h, uint32_t mask)
+{ return pending_buffers[h->index] & mask; }
+HAL_StatusTypeDef HAL_FDCAN_AbortTxRequest(FDCAN_HandleTypeDef *h, uint32_t mask)
+{
+    cancelled_buffers[h->index] |= pending_buffers[h->index] & mask;
+    pending_buffers[h->index] &= ~mask;
     return HAL_OK;
 }
 uint32_t HAL_FDCAN_GetRxFifoFillLevel(FDCAN_HandleTypeDef *h, uint32_t fifo) { (void)fifo; return rx_count[h->index]; }
@@ -216,14 +234,21 @@ static void test_power(void)
     assert(power_board_accept(BOARD_CAN_1,&f)); power_board_status_t s;
     assert(power_board_get_status(BOARD_CAN_1,&s) && s.battery_valid && s.battery_voltage==24.0f && s.battery_ms==100);
     assert(power_board_get_status(BOARD_CAN_2,&s) && !s.battery_valid);
-    f.length=4; assert(!power_board_accept(BOARD_CAN_1,&f)); f.length=8;
+    f.length=4; assert(power_board_accept(BOARD_CAN_1,&f));
+    assert(!power_board_accept(BOARD_CAN_2,&f));
+    f.length=3; assert(!power_board_accept(BOARD_CAN_1,&f)); f.length=8;
     f.id=0x200; assert(!power_board_accept(BOARD_CAN_1,&f));
     f.id=0x224; f.data[0]=40; f.data[1]=41; f.data[2]=42; assert(power_board_accept(BOARD_CAN_1,&f));
     assert(power_board_get_status(BOARD_CAN_1,&s) && s.fet_temp==40 && s.coil_temp[1]==42);
     can_free[0]=0; can_free[1]=3;
     for (unsigned int i=0; i<20; ++i) { assert(board_can_send(BOARD_CAN_1,1,data)); }
-    assert(power_board_set_on(true)==2);
-    unsigned int count=can_sent_count[1]; assert(sent[1][count-1].id==0x010 && memcmp(sent[1][count-1].data,on,8)==0);
+    assert(power_board_set_on(true)==0);
+    for (int i=0; i<7; ++i) { can_free[0]=3; board_can_process(); }
+    unsigned int other_count=can_sent_count[1];
+    assert(power_board_set_on(true)==1);
+    unsigned int count=can_sent_count[0];
+    assert(sent[0][count-1].id==0x010 && memcmp(sent[0][count-1].data,on,8)==0);
+    assert(can_sent_count[1]==other_count);
 }
 static void test_control_callback(void) { mock_dwt.CYCCNT += 340001U; mock_tim6.SR |= TIM_FLAG_UPDATE; }
 static void test_control_timer(void)
@@ -289,11 +314,172 @@ static void test_app_periodic(void)
     mock_tick=103; app_process(); assert(uart_transfers==15);
     mock_tick=104; app_process(); assert(uart_transfers==16);
 }
+
+extern uint32_t mock_gpio_low;
+
+static void inject(unsigned int bus, uint16_t id, const uint8_t data[8])
+{
+    board_can_frame_t *frame = &incoming[bus][rx_count[bus]++];
+    *frame = (board_can_frame_t){.id = id, .length = 8};
+    memcpy(frame->data, data, 8);
+}
+
+static void motor_ticks(unsigned int ms, uint16_t key_adc, bool c610_can2, uint8_t g2_state)
+{
+    while (ms-- != 0U) {
+        mock_tick++;
+        adc_values[15] = key_adc;
+        HAL_ADC_ConvHalfCpltCallback(&hadc1);
+        const uint8_t zeros[8] = {0};
+        for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
+            can_free[bus] = 3;
+            const uint16_t first = (uint16_t)(2U * bus);
+            if (mock_tick % 10U == 0U) {
+                uint8_t cal[8] = {0,0,1,3,0,0,1,3};
+                if (bus == 1 && g2_state == 2U) {
+                    cal[1] = 0x80;
+                    cal[2] = 0;
+                    cal[3] = 2;
+                }
+                inject(bus, (uint16_t)(0x510U + first), cal);
+            } else {
+                inject(bus, (uint16_t)(0x230U + first), zeros);
+                if (bus == 0 || c610_can2) {
+                    inject(bus, (uint16_t)(0x201U + first), zeros);
+                    inject(bus, (uint16_t)(0x202U + first), zeros);
+                }
+            }
+        }
+        app_process();
+        for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
+            assert(rx_count[bus] == 0);
+            rx_position[bus] = 0;
+        }
+    }
+}
+
+static const board_can_frame_t *latest_tx(unsigned int bus, uint16_t id)
+{
+    for (unsigned int n = can_sent_count[bus]; n != 0U; --n) {
+        if (sent[bus][n - 1U].id == id) { return &sent[bus][n - 1U]; }
+    }
+    return NULL;
+}
+
+static void assert_stop(unsigned int bus)
+{
+    const uint8_t zero[8] = {0};
+    const board_can_frame_t *current = latest_tx(bus, 0x200);
+    const board_can_frame_t *steer = latest_tx(bus, (uint16_t)(0x350U + 2U * bus));
+    assert(current && current->length == 8 && memcmp(current->data, zero, 8) == 0);
+    assert(steer && steer->length == 2 && memcmp(steer->data, zero, 2) == 0);
+}
+
+static void test_motor_debug(void)
+{
+    assert(app_init());
+    motor_ticks(40, 501, true, 3);
+    assert(can_sent_count[0] == 0 && can_sent_count[1] == 0);
+    mock_gpio_low = 3;
+    motor_ticks(80, 501, true, 3);
+    assert(app_motor_debug_status().state == MOTOR_DEBUG_WAIT);
+    assert(latest_tx(0, 0x120) == NULL);
+    assert_stop(0); assert_stop(1);
+    orion_can_sample_t sample;
+    assert(!orion_can_read(BOARD_CAN_1, 0x230, mock_tick, 50, &sample));
+
+    motor_ticks(35, 4095, true, 3);
+    assert(app_motor_debug_status().state == MOTOR_DEBUG_READY);
+    motor_ticks(37, 501, true, 3);
+    assert(app_motor_debug_status().state == MOTOR_DEBUG_STEER);
+    const board_can_frame_t *angle = latest_tx(0, 0x120);
+    const board_can_frame_t *control = latest_tx(0, 0x350);
+    const uint8_t target_right[8] = {6,1,50,40,0,0,0,0};
+    assert(angle && angle->length == 8 && memcmp(angle->data, target_right, 8) == 0);
+    assert(control && control->length == 2 && control->data[0] == 1 && control->data[1] == 0);
+    assert(latest_tx(1, 0x122) == NULL);
+    pending_buffers[0] = latest_buffer[0];
+    motor_ticks(1, 4095, true, 3);
+    assert(cancelled_buffers[0] != 0);
+    assert_stop(0); assert_stop(1);
+
+    for (unsigned int i = 0; i < 2; ++i) {
+        motor_ticks(35, 4095, true, 3);
+        mock_gpio_low |= 1UL << BOARD_GPIO_INPUT_SW_1;
+        motor_ticks(60, 4095, true, 3);
+        mock_gpio_low = 3;
+    }
+    motor_ticks(35, 4095, true, 3);
+    assert(app_motor_debug_status().wheel == 2);
+    motor_ticks(75, 110, true, 3);
+    assert(app_motor_debug_status().state == MOTOR_DEBUG_DRIVE);
+    const board_can_frame_t *current = latest_tx(1, 0x200);
+    int16_t ma = (int16_t)((uint16_t)current->data[4] << 8 | current->data[5]);
+    assert(ma <= -130 && ma >= -500);
+    assert(current->data[0] == 0 && current->data[1] == 0 && current->data[2] == 0 &&
+           current->data[3] == 0 && current->data[6] == 0 && current->data[7] == 0);
+    assert_stop(0);
+    motor_ticks(80, 110, false, 3);
+    assert_stop(0); assert_stop(1);
+    motor_ticks(60, 110, true, 3);
+    assert(app_motor_debug_status().state == MOTOR_DEBUG_WAIT);
+    assert_stop(1);
+
+    motor_ticks(35, 4095, true, 3);
+    motor_ticks(32, 50, true, 3);
+    control = latest_tx(1, 0x352);
+    assert(app_motor_debug_status().state == MOTOR_DEBUG_INIT && control->data[0] == 3 && control->data[1] == 0);
+    motor_ticks(10, 50, true, 2);
+    motor_ticks(35, 50, true, 3);
+    assert_stop(1);
+
+    for (unsigned int i = 0; i < 2; ++i) {
+        motor_ticks(35, 4095, true, 3);
+        mock_gpio_low |= 1UL << BOARD_GPIO_INPUT_SW_1;
+        motor_ticks(32, 4095, true, 3);
+        mock_gpio_low = 3;
+    }
+    motor_ticks(35, 4095, true, 3);
+    assert(app_motor_debug_status().wheel == 4);
+    motor_ticks(46, 2400, true, 3);
+    assert(app_motor_debug_status().state == MOTOR_DEBUG_DRIVE);
+    for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
+        current = latest_tx(bus, 0x200);
+        unsigned int active = 4U * bus;
+        unsigned int unused = 4U - active;
+        assert(current->data[active + 1] != 0 && current->data[active + 3] != 0);
+        assert(current->data[unused] == 0 && current->data[unused + 1] == 0 &&
+               current->data[unused + 2] == 0 && current->data[unused + 3] == 0);
+    }
+    mock_gpio_low = 0;
+    motor_ticks(35, 2400, true, 3);
+    assert(app_motor_debug_status().state == MOTOR_DEBUG_OFF);
+    assert_stop(0); assert_stop(1);
+    mock_gpio_low = 3;
+    motor_ticks(80, 2400, true, 3);
+    assert(app_motor_debug_status().state == MOTOR_DEBUG_WAIT);
+    assert_stop(0); assert_stop(1);
+
+    motor_ticks(35, 4095, true, 3);
+    motor_ticks(37, 3001, true, 3);
+    angle = latest_tx(1, 0x122);
+    const uint8_t target_left[8] = {0xFA,0xFE,50,40,0xFA,0xFE,50,40};
+    assert(angle && memcmp(angle->data, target_left, 8) == 0);
+    const uint8_t error[8] = {2,0,1};
+    inject(1, 0x000, error);
+    can_free[0] = can_free[1] = 3;
+    app_process();
+    assert(app_motor_debug_status().state == MOTOR_DEBUG_FAULT);
+    assert_stop(0); assert_stop(1);
+    assert(latest_tx(0, 0x000) == NULL && latest_tx(1, 0x000) == NULL);
+}
+
 int main(int argc, char **argv)
 {
     void test_peripherals(void);
     if (argc>1 && strcmp(argv[1],"peripherals")==0) { test_peripherals(); return 0; }
     if (argc>1 && strcmp(argv[1],"app")==0) { test_app_periodic(); puts("PASS: 500 Hz ISR and 10 Hz main logging"); return 0; }
+    if (argc>1 && strcmp(argv[1],"motor")==0) { test_motor_debug(); puts("PASS: Atlas/C610 motor debug, bus routing and stops"); return 0; }
     test_can(); test_uart(); test_adc_switch(); test_buzzer(); test_power();
     test_control_timer();
     assert(mock_primask==0); puts("PASS: CAN/UART/ADC/SW/PWM/power driver tests"); return 0;
