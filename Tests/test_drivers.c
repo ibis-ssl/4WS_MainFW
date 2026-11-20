@@ -512,6 +512,21 @@ static void test_motor_debug(void)
     assert_stop(1);
 
     motor_ticks(35, 4095, true, 3);
+    rtt_input = "init\n";
+    motor_ticks(1, 4095, true, 3);
+    assert(strcmp(rtt_output, "OK init\n") == 0);
+    for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
+        const board_can_frame_t *control = latest_tx(bus, (uint16_t)(0x350U + 2U * bus));
+        assert(control && control->data[0] == 3 && control->data[1] == 3);
+    }
+    motor_ticks(400, 4095, true, 2);
+    rtt_input = "keep\n";
+    motor_ticks(200, 4095, true, 2);
+    assert(app_motor_debug_status() == MOTOR_DEBUG_INIT);
+    motor_ticks(302, 4095, true, 2);
+    assert_stop(0); assert_stop(1);
+
+    motor_ticks(35, 4095, true, 3);
     motor_ticks(46, 2400, true, 3);
     assert(app_motor_debug_status() == MOTOR_DEBUG_DRIVE);
     assert_all_drive(1);

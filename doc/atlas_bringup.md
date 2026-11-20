@@ -61,7 +61,18 @@ openocd -c 'set MAIN_STLINK_SERIAL STLINK_SERIAL' -f ./Script/openocd_main_rtt.c
 
 `STLINK_SERIAL` を対象の番号へ置き換える。OpenOCDはCPUを止めずにRTTチャネル0を `127.0.0.1:19030` へ公開する。TCPで改行付きの `status` を送ると、RPMと指令電流、および `cal`（操舵校正）、`esc`（C610帰還）、`range`（操舵範囲）の4輪ビットマスクが返る。各マスクはbit 0～3がg0～g3に対応する。
 
-全4輪を浮かせ、他のCAN指令元を停止し、モーターデバッグに入ってボタンを離した状態で試験する。`cal=F esc=F` と4輪の停止を確認してから `drive+` または `drive-` を1回送る。駆動は最大2.2秒、目標は±300ローターrpm、指令上限は各輪0.5 A。`stop`、ボタン押下、モード離脱、帰還断でも停止する。USB-CANは受信に使い、Mainの `0x200` と各輪の `0x201`～`0x204` を記録する。
+全4輪を浮かせ、他の駆動指令元を停止し、モーターデバッグに入ってボタンを離した状態で試験する。RTTの `init` は全軸の校正要求を開始する。校正中はホストが `keep` を送り、500 ms途絶するとMainが停止する。校正時間の上限は30秒。
+
+速度試験は `cal=F esc=F` と4輪の停止を確認して `drive+` または `drive-` を1回送る。駆動は最大2.2秒、目標は±300ローターrpm、指令上限は各輪0.5 A。`stop`、ボタン押下、モード離脱、帰還断でも停止する。
+
+RTTと両CANを同時記録する例。Pythonはステア側の `python-can` とCANRushアダプターを利用できる環境を使う。
+
+```powershell
+& ../G474_SWCLDvier/.venv/Scripts/python.exe ./Script/debug_motor_rtt.py sequence `
+  --can1 COM12 --can2 COM46 --steer-repo ../G474_SWCLDvier
+```
+
+`sequence` は `init`、`drive+`、`drive-` の順に実行し、完了条件に達しない段階で停止する。段階を個別に実行する場合は、`sequence` を対象のコマンドへ置き換える。ログは既定で `build/hardware/motor-rtt-YYYYMMDD-HHMMSS/` へ保存する。CANフレーム、ID 0の保守CANによる軸読取り、RTT送受信、結果の要約を収録する。保守offsetの既定は16で、0の場合は `--id0-offset 0` を指定する。
 
 ### USB-CANと帯域試算
 

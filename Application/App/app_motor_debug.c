@@ -14,7 +14,7 @@ enum {
     ATLAS_TIMEOUT_MS = 150, CALIBRATION_TIMEOUT_MS = 2500, DRIVE_TIMEOUT_MS = 50,
     LOOP_TIMEOUT_MS = 100, INITIALIZE_TIMEOUT_MS = 30000,
     RANGE_READ_MS = 50, RANGE_FIELD_COUNT = 3, RANGE_READ_COUNT = 2 * RANGE_FIELD_COUNT,
-    RTT_DRIVE_MS = 2200,
+    RTT_DRIVE_MS = 2200, RTT_INIT_KEEPALIVE_MS = 500,
     TARGET_ROTOR_RPM = 300, STOPPED_RPM = 40, MAX_ROTOR_RPM = 18000
 };
 
@@ -48,10 +48,11 @@ static steering_t steering[BOARD_CAN_COUNT];
 static motor_debug_state_t motion;
 static user_switch_t raw_key, running_key;
 static bool raw_mode, mode_active, neutral_seen;
-static bool fault, fault_handled, interrupted, rtt_drive;
+static bool fault, fault_handled, interrupted, rtt_motion;
 static uint8_t init_waiting, init_observed;
 static uint8_t stop_repeats[BOARD_CAN_COUNT];
 static uint32_t mode_at, input_at, motion_at, last_process, last_state, last_angle, last_drive, last_stop;
+static uint32_t rtt_keep_at;
 static float ramped_rpm;
 
 static bool fresh(uint32_t now, uint32_t at, uint32_t timeout)
@@ -230,7 +231,7 @@ static void begin_stop(uint32_t now)
 {
     motion = MOTOR_DEBUG_OFF;
     neutral_seen = false;
-    rtt_drive = false;
+    rtt_motion = false;
     for (unsigned int i = 0; i < WHEEL_COUNT; ++i) { wheels[i].command_ma = 0; }
     last_stop = now - DRIVE_PERIOD_MS;
     for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
@@ -405,23 +406,44 @@ static void rtt_process(uint32_t now, user_switch_t key)
         length = 0;
         if (discard) { discard = false; continue; }
         if (strcmp(command, "status") == 0) { rtt_status(now); continue; }
+        if (strcmp(command, "keep") == 0) {
+            if (rtt_motion && motion == MOTOR_DEBUG_INIT) { rtt_keep_at = now; }
+            continue;
+        }
         if (strcmp(command, "stop") == 0) {
             if (motion != MOTOR_DEBUG_OFF) { begin_stop(now); }
             board_debug_rtt_write("OK stop\n");
             continue;
         }
+        bool initialize = strcmp(command, "init") == 0;
         bool positive = strcmp(command, "drive+") == 0;
-        if (!positive && strcmp(command, "drive-") != 0) { continue; }
+        if (!initialize && !positive && strcmp(command, "drive-") != 0) { continue; }
+        motor_debug_state_t action = initialize ? MOTOR_DEBUG_INIT : MOTOR_DEBUG_DRIVE;
         if (key != USER_SWITCH_NONE || !neutral_seen || !mode_active || fault || any_stop_pending() ||
-            motion != MOTOR_DEBUG_OFF || !motion_ready(MOTOR_DEBUG_DRIVE, now, true)) {
-            board_debug_rtt_write("REJECT drive\n");
+            motion != MOTOR_DEBUG_OFF || !motion_ready(action, now, true)) {
+            board_debug_rtt_write(initialize ? "REJECT init\n" : "REJECT drive\n");
             continue;
         }
-        begin_motion(MOTOR_DEBUG_DRIVE, positive ? USER_SWITCH_FORWARD : USER_SWITCH_BACK, now);
-        rtt_drive = true;
+        user_switch_t command_key = initialize ? USER_SWITCH_CENTER :
+            (positive ? USER_SWITCH_FORWARD : USER_SWITCH_BACK);
+        begin_motion(action, command_key, now);
+        rtt_motion = true;
+        rtt_keep_at = now;
         neutral_seen = false;
-        board_debug_rtt_write("OK drive\n");
+        board_debug_rtt_write(initialize ? "OK init\n" : "OK drive\n");
     }
+}
+
+static bool motion_released(user_switch_t key, uint32_t now)
+{
+    if (rtt_motion) {
+        /* 通信が途絶した校正を継続しない。速度試験は最長2.2秒の単発。 */
+        bool timed_out = motion == MOTOR_DEBUG_INIT ?
+            !fresh(now, rtt_keep_at, RTT_INIT_KEEPALIVE_MS) :
+            !fresh(now, motion_at, RTT_DRIVE_MS);
+        return key != USER_SWITCH_NONE || timed_out;
+    }
+    return key != running_key && (motion != MOTOR_DEBUG_INIT || key != USER_SWITCH_NONE);
 }
 
 void app_motor_debug_process(void)
@@ -449,9 +471,7 @@ void app_motor_debug_process(void)
     if (motion != MOTOR_DEBUG_OFF) {
         bool init_finished = motion == MOTOR_DEBUG_INIT &&
             (init_waiting == 0U || !fresh(now, motion_at, INITIALIZE_TIMEOUT_MS));
-        bool released = rtt_drive ? key != USER_SWITCH_NONE || !fresh(now, motion_at, RTT_DRIVE_MS) :
-            key != running_key && (motion != MOTOR_DEBUG_INIT || key != USER_SWITCH_NONE);
-        if (expired || interrupted || released || init_finished ||
+        if (expired || interrupted || motion_released(key, now) || init_finished ||
             !motion_ready(motion, now, false)) { begin_stop(now); }
     }
     send_stops(now);
