@@ -14,6 +14,7 @@
 #include "Device/power_board.h"
 #include "App/app.h"
 #include "App/app_board_reset.h"
+#include "App/app_steer_update.h"
 #include "App/app_control.h"
 #include "App/app_motor_debug.h"
 #include "Board/board_gpio.h"
@@ -612,6 +613,120 @@ static void test_motor_debug(void)
     assert(latest_tx(0, 0x000) == NULL && latest_tx(1, 0x000) == NULL);
 }
 
+static void test_steer_update(void)
+{
+    assert(app_init());
+    motor_ticks(700, 4095, true, 3);
+    assert(app_board_reset_status() == BOARD_RESET_READY);
+
+    /* g0は正温、g1は負温、g2は無効、g3は0℃。 */
+    inject(0, 0x290U, (const uint8_t[8]){125, 0, 0xF1, 0xFF});
+    incoming[0][0].length = 4;
+    inject(0, 0x292U, (const uint8_t[8]){99, 0, 99, 0});
+    incoming[0][1].length = 4;
+    inject(1, 0x292U, (const uint8_t[8]){0, 0x80, 0, 0});
+    incoming[1][0].length = 4;
+    rtt_input = "temp\n";
+    app_process();
+    assert(strcmp(rtt_output, "TEMP seen=F valid=B decic=125,-15,-32768,0\n") == 0);
+    rx_position[0] = rx_position[1] = 0;
+    mock_tick += 2500;
+    rtt_input = "temp\n";
+    app_process();
+    assert(strcmp(rtt_output, "TEMP seen=0 valid=0 decic=-32768,-32768,-32768,-32768\n") == 0);
+
+    uint8_t image_bytes[521] = {
+        [1] = 0x10, [3] = 0x20, [4] = 0x09, [5] = 0x40, [7] = 0x08,
+        [512] = 0x44, [513] = 0x43, [514] = 0x44, [515] = 0x34,
+        [516] = 3, [520] = 0xAB
+    };
+    const uint32_t expected_crc = 0x1269ABD7U;
+    motor_ticks(1, 4095, true, 3);
+    unsigned int can2_before = can_sent_count[1];
+    assert(app_steer_update_begin(1, sizeof(image_bytes), 0, mock_tick));
+    for (unsigned int at = 0; at < sizeof(image_bytes); at += 256U) {
+        unsigned int count = at == 512U ? 9U : 256U;
+        assert(app_steer_update_stage(at, image_bytes + at, count, mock_tick));
+    }
+    assert(!app_steer_update_commit(mock_tick));
+    assert(can_sent_count[1] == can2_before);
+
+    rtt_input = "fw_begin 1 521 1269abd7\n";
+    motor_ticks(1, 4095, true, 3);
+    assert(strcmp(rtt_output, "OK fw\n") == 0);
+    assert(!app_steer_update_stage(2, image_bytes + 2, 256, mock_tick));
+    char chunk[530] = "fw_data 0 ";
+    for (unsigned int i = 0; i < 256U; ++i) {
+        (void)snprintf(chunk + 10U + 2U * i, 3, "%02x", image_bytes[i]);
+    }
+    chunk[522] = '\n';
+    chunk[523] = '\0';
+    rtt_input = chunk;
+    motor_ticks(6, 4095, true, 3);
+    assert(strcmp(rtt_output, "OK fw\n") == 0);
+    assert(app_steer_update_stage(0, image_bytes, 256, mock_tick));
+    assert(app_steer_update_stage(256, image_bytes + 256, 256, mock_tick));
+    assert(app_steer_update_stage(512, image_bytes + 512, 9, mock_tick));
+    rtt_input = "fw_commit\n";
+    motor_ticks(1, 4095, true, 3);
+    assert(strcmp(rtt_output, "OK fw\n") == 0);
+    assert(app_steer_update_locked() && !app_steer_update_abort());
+    unsigned int received = 0, frame_index = 0, blocks = 0;
+    bool erased = false, finished = false, rebooted = false;
+    for (unsigned int t = 0; t < 1200U && app_steer_update_locked(); ++t) {
+        mock_tick++;
+        can_free[0] = can_free[1] = 3;
+        while (can2_before < can_sent_count[1]) {
+            const board_can_frame_t *tx = &sent[1][can2_before++];
+            uint8_t reply[8] = {0};
+            uint32_t value = 0;
+            if (tx->id == 0x5D0U) {
+                const uint8_t id[8] = {0xD4, 0x8B, tx->data[2], tx->data[3], 1};
+                inject(1, 0x5D1, id);
+                continue;
+            }
+            if (tx->id == 0x601U) {
+                assert(erased && tx->data[0] == frame_index && tx->data[1] == 0U);
+                for (unsigned int i = 0; i < 6U; ++i) {
+                    unsigned int at = received + frame_index * 6U + i;
+                    uint8_t byte = frame_index * 6U + i >= 256U || at >= sizeof(image_bytes) ?
+                        0xFFU : image_bytes[at];
+                    assert(tx->data[2U + i] == byte);
+                }
+                reply[0] = 0x20;
+                reply[2] = (uint8_t)frame_index++;
+            } else if (tx->id == 0x600U) {
+                reply[0] = tx->data[0];
+                switch (reply[0]) {
+                case 2: value = 0x18000; break;
+                case 3: assert(finished); value = sizeof(image_bytes); break;
+                case 4: value = finished ? expected_crc : 0x11223344U; break;
+                case 5: value = 0x34444344U; break;
+                case 0x10: erased = true; break;
+                case 0x11: frame_index = 0; break;
+                case 0x12:
+                    assert(frame_index == 43U);
+                    blocks++;
+                    received = blocks < 3U ? blocks * 256U : sizeof(image_bytes);
+                    value = received;
+                    break;
+                case 0x13: assert(received == sizeof(image_bytes)); finished = true; break;
+                case 0x14: assert(finished); rebooted = true; break;
+                default: break;
+                }
+            } else { continue; }
+            for (unsigned int n = 0; n < 4U; ++n) { reply[4U + n] = (uint8_t)(value >> (8U * n)); }
+            inject(1, 0x602, reply);
+        }
+        app_process();
+        rx_position[1] = 0;
+    }
+    steer_update_status_t update = app_steer_update_status();
+    assert(update.state == STEER_UPDATE_DONE && update.written == sizeof(image_bytes));
+    assert(update.old_crc == 0x11223344U && update.image_crc == expected_crc && rebooted);
+    assert(!app_steer_update_locked() && latest_tx(0, 0x600U) == NULL);
+}
+
 int main(int argc, char **argv)
 {
     void test_peripherals(void);
@@ -619,6 +734,7 @@ int main(int argc, char **argv)
     if (argc>1 && strcmp(argv[1],"app")==0) { test_app_periodic(); puts("PASS: 500 Hz ISR and 10 Hz main logging"); return 0; }
     if (argc>1 && strcmp(argv[1],"motor")==0) { test_motor_debug(); puts("PASS: Atlas/C610 motor debug, bus routing and stops"); return 0; }
     if (argc>1 && strcmp(argv[1],"boot")==0) { test_startup_reset_failure(); puts("PASS: startup reset timeout, offset fallback and interlock"); return 0; }
+    if (argc>1 && strcmp(argv[1],"update")==0) { test_steer_update(); puts("PASS: steering temperatures and RTT-to-CAN firmware update"); return 0; }
     test_can(); test_uart(); test_adc_switch(); test_buzzer(); test_power();
     test_control_timer();
     assert(mock_primask==0); puts("PASS: CAN/UART/ADC/SW/PWM/power driver tests"); return 0;

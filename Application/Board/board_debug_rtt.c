@@ -17,7 +17,7 @@ typedef struct {
     rtt_ring_t up, down;
 } rtt_control_t;
 
-static uint8_t up[1024], down[64];
+static uint8_t up[1024], down[1024];
 static volatile rtt_control_t main_rtt;
 
 void board_debug_rtt_init(void)

@@ -10,6 +10,13 @@ static uint16_t read_be(const uint8_t *data)
     return (uint16_t)((uint16_t)data[0] << 8 | data[1]);
 }
 
+void atlas_decode_temperature(const uint8_t data[4], int16_t decic[2])
+{
+    /* 0x8000は未接続等を示す無効値として、符号付き0.1℃のまま上位へ渡す。 */
+    decic[0] = (int16_t)read_le(data);
+    decic[1] = (int16_t)read_le(data + 2);
+}
+
 void atlas_decode_feedback(const uint8_t data[8], atlas_axis_feedback_t axes[2])
 {
     for (unsigned int axis = 0; axis < 2U; ++axis) {

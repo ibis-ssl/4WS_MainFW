@@ -1,5 +1,6 @@
 #include "App/app_motor_debug.h"
 #include "App/app_board_reset.h"
+#include "App/app_steer_update.h"
 #include "Board/board_gpio.h"
 #include "Board/board_debug_rtt.h"
 #include "Board/board_time.h"
@@ -55,6 +56,11 @@ static uint8_t stop_repeats[BOARD_CAN_COUNT];
 static uint32_t mode_at, input_at, motion_at, last_process, last_state, last_angle, last_drive, last_stop;
 static uint32_t rtt_keep_at;
 static float ramped_rpm;
+static struct {
+    int16_t value[2];
+    uint32_t at;
+    bool seen;
+} steering_temperature[BOARD_CAN_COUNT];
 
 static bool fresh(uint32_t now, uint32_t at, uint32_t timeout)
 {
@@ -177,7 +183,6 @@ bool app_motor_debug_accept(board_can_bus_t bus, const board_can_frame_t *frame)
         }
         return true;
     }
-    if (frame->id == 0x290U + first) { return true; }
     if (frame->id >= 0x201U && frame->id <= 0x204U) {
         const unsigned int index = frame->id - 0x201U;
         c610_feedback_t feedback;
@@ -205,6 +210,17 @@ bool app_motor_debug_accept(board_can_bus_t bus, const board_can_frame_t *frame)
     return frame->id == 0x230U || frame->id == 0x232U ||
            frame->id == 0x510U || frame->id == 0x512U ||
            frame->id == 0x290U || frame->id == 0x292U || frame->id == 0x200U;
+}
+
+bool app_motor_debug_accept_temperature(board_can_bus_t bus, const board_can_frame_t *frame)
+{
+    if (frame->id != 0x290U && frame->id != 0x292U) { return false; }
+    if (frame->id == 0x290U + 2U * bus && frame->length == 4U) {
+        atlas_decode_temperature(frame->data, steering_temperature[bus].value);
+        steering_temperature[bus].at = frame->received_ms;
+        steering_temperature[bus].seen = true;
+    }
+    return true;
 }
 
 static bool motor_mode_selected(void)
@@ -391,49 +407,55 @@ static void rtt_status(uint32_t now)
     if (length > 0 && (size_t)length < sizeof(line)) { board_debug_rtt_write(line); }
 }
 
-static void rtt_process(uint32_t now, user_switch_t key)
+steer_temperature_t app_motor_debug_temperature(uint32_t now)
 {
-    static char command[12];
-    static size_t length;
-    static bool discard;
-    uint8_t byte;
-    for (unsigned int n = 0; n < 32U && board_debug_rtt_read(&byte); ++n) {
-        if (byte == '\r') { continue; }
-        if (byte != '\n') {
-            if (length == sizeof(command) - 1U || byte == 0U) { discard = true; }
-            if (!discard) { command[length++] = (char)byte; }
-            continue;
-        }
-        command[length] = '\0';
-        length = 0;
-        if (discard) { discard = false; continue; }
-        if (strcmp(command, "status") == 0) { rtt_status(now); continue; }
-        if (strcmp(command, "keep") == 0) {
-            if (rtt_motion && motion == MOTOR_DEBUG_INIT) { rtt_keep_at = now; }
-            continue;
-        }
-        if (strcmp(command, "stop") == 0) {
-            if (motion != MOTOR_DEBUG_OFF) { begin_stop(now); }
-            board_debug_rtt_write("OK stop\n");
-            continue;
-        }
-        bool initialize = strcmp(command, "init") == 0;
-        bool positive = strcmp(command, "drive+") == 0;
-        if (!initialize && !positive && strcmp(command, "drive-") != 0) { continue; }
-        motor_debug_state_t action = initialize ? MOTOR_DEBUG_INIT : MOTOR_DEBUG_DRIVE;
-        if (key != USER_SWITCH_NONE || !neutral_seen || !mode_active || fault || any_stop_pending() ||
-            motion != MOTOR_DEBUG_OFF || !motion_ready(action, now, true)) {
-            board_debug_rtt_write(initialize ? "REJECT init\n" : "REJECT drive\n");
-            continue;
-        }
-        user_switch_t command_key = initialize ? USER_SWITCH_CENTER :
-            (positive ? USER_SWITCH_FORWARD : USER_SWITCH_BACK);
-        begin_motion(action, command_key, now);
-        rtt_motion = true;
-        rtt_keep_at = now;
-        neutral_seen = false;
-        board_debug_rtt_write(initialize ? "OK init\n" : "OK drive\n");
+    steer_temperature_t result = {0};
+    for (unsigned int i = 0; i < WHEEL_COUNT; ++i) {
+        unsigned int bus = i / 2U;
+        bool current = steering_temperature[bus].seen &&
+            fresh(now, steering_temperature[bus].at, CALIBRATION_TIMEOUT_MS);
+        result.decic[i] = current ? steering_temperature[bus].value[i % 2U] : INT16_MIN;
+        if (current) { result.seen_mask |= 1U << i; }
+        if (result.decic[i] != INT16_MIN) { result.valid_mask |= 1U << i; }
     }
+    return result;
+}
+
+bool app_motor_debug_idle(void)
+{
+    return motion == MOTOR_DEBUG_OFF && user_switch_read() == USER_SWITCH_NONE;
+}
+
+void app_motor_debug_rtt_command(const char *command)
+{
+    uint32_t now = board_millis();
+    if (strcmp(command, "status") == 0) { rtt_status(now); return; }
+    if (strcmp(command, "keep") == 0) {
+        if (rtt_motion && motion == MOTOR_DEBUG_INIT) { rtt_keep_at = now; }
+        return;
+    }
+    if (strcmp(command, "stop") == 0) {
+        if (motion != MOTOR_DEBUG_OFF) { begin_stop(now); }
+        board_debug_rtt_write("OK stop\n");
+        return;
+    }
+    bool initialize = strcmp(command, "init") == 0;
+    bool positive = strcmp(command, "drive+") == 0;
+    if (!initialize && !positive && strcmp(command, "drive-") != 0) { return; }
+    motor_debug_state_t action = initialize ? MOTOR_DEBUG_INIT : MOTOR_DEBUG_DRIVE;
+    if (app_board_reset_status() != BOARD_RESET_READY || app_steer_update_locked() ||
+        !app_motor_debug_idle() || !neutral_seen || !mode_active || fault || any_stop_pending() ||
+        !motion_ready(action, now, true)) {
+        board_debug_rtt_write(initialize ? "REJECT init\n" : "REJECT drive\n");
+        return;
+    }
+    user_switch_t command_key = initialize ? USER_SWITCH_CENTER :
+        (positive ? USER_SWITCH_FORWARD : USER_SWITCH_BACK);
+    begin_motion(action, command_key, now);
+    rtt_motion = true;
+    rtt_keep_at = now;
+    neutral_seen = false;
+    board_debug_rtt_write(initialize ? "OK init\n" : "OK drive\n");
 }
 
 static bool motion_released(user_switch_t key, uint32_t now)
@@ -451,8 +473,12 @@ static bool motion_released(user_switch_t key, uint32_t now)
 void app_motor_debug_process(void)
 {
     uint32_t now = board_millis();
+    if (app_steer_update_locked()) {
+        neutral_seen = false;
+        for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) { invalidate_range(&steering[bus]); }
+        return;
+    }
     if (app_board_reset_status() != BOARD_RESET_READY) {
-        rtt_process(now, USER_SWITCH_INVALID);
         return;
     }
     bool expired = !fresh(now, last_process, LOOP_TIMEOUT_MS);
@@ -481,7 +507,6 @@ void app_motor_debug_process(void)
             !motion_ready(motion, now, false)) { begin_stop(now); }
     }
     send_stops(now);
-    rtt_process(now, key);
     if (!mode_active || fault || any_stop_pending()) { return; }
 
     if (motion == MOTOR_DEBUG_OFF) { read_ranges(now); }

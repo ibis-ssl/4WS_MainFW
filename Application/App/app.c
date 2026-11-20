@@ -17,6 +17,8 @@
 #include "App/app_monitor.h"
 #include "App/app_motor_debug.h"
 #include "App/app_board_reset.h"
+#include "App/app_host_rtt.h"
+#include "App/app_steer_update.h"
 #include "Board/board_gpio.h"
 
 static uint32_t report_ms;
@@ -69,14 +71,20 @@ void app_process(void)
         board_can_frame_t frame;
         for (unsigned int n = 0; n < 20U && board_can_receive((board_can_bus_t)bus, &frame); ++n) {
             bool ready = app_board_reset_status() == BOARD_RESET_READY;
-            bool motor_frame = ready && app_motor_debug_accept((board_can_bus_t)bus, &frame);
+            bool motor_frame = app_steer_update_accept((board_can_bus_t)bus, &frame) ||
+                app_motor_debug_accept_temperature((board_can_bus_t)bus, &frame) ||
+                (ready && app_motor_debug_accept((board_can_bus_t)bus, &frame));
             if (!ready) { app_board_reset_accept((board_can_bus_t)bus, &frame); }
             if (!motor_frame) { (void)power_board_accept((board_can_bus_t)bus, &frame); }
             app_monitor_accept((board_can_bus_t)bus, &frame, ready && !motor_frame);
         }
     }
     app_board_reset_process(board_millis());
+    app_host_rtt_process();
     app_motor_debug_process();
+    app_steer_update_process(board_millis());
+    /* 更新応答の回収を優先し、同期I2C転送をFlash書込み中に挟まない。 */
+    if (app_steer_update_status().state == STEER_UPDATE_RUNNING) { return; }
     uint8_t byte;
     for (unsigned int n = 0; n < 32U && board_debug_uart_read(&byte); ++n) {
         /* 入力で定期出力を増速しない。操作コマンドは今後Appで定義する。 */

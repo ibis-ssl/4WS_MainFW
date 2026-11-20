@@ -61,6 +61,8 @@ C610には公開CAN仕様で再起動指令が定義されていない。Mainは
 
 ## 再現用ツール
 
+ステア温度の診断と、Mainを経由したステアFW更新の手順は[温度とステアFW更新](steer_fw_update.md)を参照する。
+
 ### MainのRTT
 
 ```powershell

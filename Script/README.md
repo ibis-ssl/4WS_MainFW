@@ -14,6 +14,7 @@
 | `read_oled_timing.py` | OLED計測RAMのSWD読取り。 `--serial` 必須、`--elf` と `--output` を指定可能 |
 | `openocd_main_rtt.cfg` | MainのRTTチャネル0をローカルTCPへ公開。[RTT接続と試験](../doc/atlas_bringup.md#mainのrtt) |
 | `debug_motor_rtt.py` | RTTで校正・速度試験を実行し、RTT・両CAN・ID 0の軸診断を保存。試験は `init`、`drive+`、`drive-`、または `sequence` |
+| `main_debug_rtt.py` | RTTでステア温度を取得し、CM4相当のFW更新を実行する。 [温度とステアFW更新](../doc/steer_fw_update.md) |
 | `common.ps1` | PowerShellスクリプト共通のツール探索・実行処理 |
 
 書き込みと再生成は[開発手順](../doc/development.md)、CAN採取と読取りの使い分けは[結合手順](../doc/atlas_bringup.md)を参照する。SWD読取りスクリプトはCPUを一時停止し、終了時に再開を試みる。

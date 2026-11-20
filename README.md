@@ -37,6 +37,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./Script/build.ps1 -Configur
 
 ## 文書
 
+ステア温度の読取りとステアFW更新はPCからMainのRTTで操作できます。更新のデータ・状態管理は将来のCM4接続からも呼び出せるAPIに分離しています。 [温度とステアFW更新](doc/steer_fw_update.md)
+
 [文書案内](doc/README.md)から現行仕様と作業手順を参照できます。現在の未確認事項は[実装・検証計画](doc/implementation_plan.md)にまとめています。
 
 複数レイヤー・リポジトリにまたがる通信契約は、submoduleの[共通仕様](specs/README.md)を参照します。未実装の4WS通信・制御案は[設計案](specs/proposals/README.md)、このFWの対応範囲・差異・内部実装・検証結果は`doc/`で管理します。[管理境界](doc/specs_migration.md)と[仕様の取得・更新手順](doc/development.md#共通仕様リポジトリ)を参照してください。

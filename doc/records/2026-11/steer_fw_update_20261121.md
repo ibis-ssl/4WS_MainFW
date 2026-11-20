@@ -1,0 +1,11 @@
+# ステア温度とMain経由FW更新
+
+2026-11-21。PCがCM4相当の要求をMainのST-Link RTTへ送った。MainはReleaseをST-Link SN `002D00373033510635393935` で書き込み、照合とリセットに成功。最終ELF SHA256は `761E66E0D9D6904469705A04FE5B30F52ECB3284ECD9FA8FEBB03CBE01C4ED51`。
+
+- Debug／Releaseのクリーンビルドと `python ./Script/test_drivers.py` が成功。温度の符号、無効値、0℃、鮮度、バス分離と、RTTのデータ受信、CRC不一致拒否、CAN更新の分割、確定、再起動確認を検証した。
+- MainをHALモック、ステアを参照チェックアウト `1100950` の `Boot/update_protocol.c`、対象FlashをRAMで模擬した組合せでも、更新、書込み内容の一致、起動可能判定を確認した。
+- 実機MainではUSB-CANからCAN1に `0x290`、CAN2に `0x292` の試験フレームを各1回送った。PCのRTT診断は順に25.3℃、−1.2℃、`null`、0.0℃を返し、2.5秒経過後は4軸とも `null` になった。両ステア基板の実温度フレームは観測されなかった。
+- ステアV4のReleaseアプリ48,172バイト、CRC32 `63ECDA06` をRTTからMainのRAMへ転送した。ID 0／1それぞれでMainが対象バスへ保守offset 0/16のID照会を送り、応答なしで停止した。書込み長は両方とも0バイト。採取したCANログにENTERやFlash消去指令は無かった。C610の4台分の帰還は両バスで継続した。
+- 実基板のアプリ書込み・再起動、CRCと保存設定の照合、CM4のSPI経路は未確認。[実装・検証計画](../../implementation_plan.md)
+
+元データは `build/hardware/` の `atlas-fw-final-evidence-20261121.json`、`steer-update-id0-20261121.jsonl`、`steer-update-id1-20261121.jsonl`、`steer-update-can-20261121.json`。実行手順は[温度とステアFW更新](../../steer_fw_update.md)を参照する。

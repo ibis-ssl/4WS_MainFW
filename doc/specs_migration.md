@@ -30,7 +30,7 @@ MainのCAN接続仕様がspecsにある上位・停止・互換性要件を変�
 ## 現在の実装差
 
 - CM4 SPIと通常モードの機体制御は未実装。Mainの通常制御入口は500 Hz。基板上のモーターデバッグは[本repoで実装・管理](atlas_bringup.md)。
-- Orion解析は8 byte限定、NaN/Inf拒否。実機で観測した0x215/216のDLC4や0x244は状態へ反映されない。ステア新形式は未実装。
+- Orion汎用解析は8 byte限定、NaN/Inf拒否。電源デコーダーはCAN1の0x215/216のDLC4を扱う。Atlasの通常CANとステアV3更新は専用経路で処理する。[ステアFW更新](steer_fw_update.md)
 - CAN2高負荷時のRX破棄は未解決。詳細な検証状況は各実装文書で管理する。
 - Orionの停止条件・UART・ブートローダーをAtlasへ適合済みとして転用しない。
 
