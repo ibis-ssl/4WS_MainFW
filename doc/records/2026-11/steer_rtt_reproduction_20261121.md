@@ -14,3 +14,7 @@
 Debug／ReleaseビルドとHALモック試験を実施。モックはRTTから全軸に校正を送ること、`keep` による継続、500 ms途絶時の両バス停止を確認した。Mainに書き込んだRelease ELFのSHA256は `88BC768283052D024FE8005587D612B04EB41B8539FDD5DA5EA8876F7FD3F8F1`。SWD書き込み・照合・リセットに成功した。
 
 元ログは `build/hardware/motor-rtt-20261121-live/` の `main-rtt.jsonl`、`CAN1.csv`、`CAN2.csv`、`CAN1-axis.jsonl`、`summary.json`。時刻はUSB-CAN・RTTを読んだPCでの観測値。
+
+## モーター接続修正後の設定照合
+
+2026-11-21。ユーザーが抜けかかったモーター接続を直した後、CAN保守読取りで両基板の保存電流上限が全4軸とも2.0 Aであることを確認した。通常CAN初期校正時はステアFWが探索と中立移動のDuty上限を各20%、電流上限を保存値と1.0 Aの小さい方に設定する。ID 1の両軸から実行時設定の20%／20%／1.0 Aを読み戻した。ID 0はM1のerror 4を保持しており、Fault後の校正作業値は0だった。設定変更、リセット、再駆動は未実施。元データは `build/hardware/steer-limits-20261121.json`。
