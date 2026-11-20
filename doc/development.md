@@ -29,6 +29,10 @@ git -C specs switch -c docs/4ws-spec-boundaries
 
 specsの未コミット変更は親repoの参照コミットだけでは復元できません。共有するときはspecs側の変更をコミットし、そのコミットを親repoで記録します。設計案や契約へのリンクはsubmodule内への相対パスとし、mainの最新版へのリンクで参照版を迂回しません。
 
+## Atlas／C610の結合確認
+
+ステア基板とC610のPC検証結果、Main側の着手順、CANRushのCSV採取と `Script/analyze_atlas_can.py` の使い方は[結合開発](atlas_bringup.md)を参照してください。
+
 ## 必要なツール
 
 - CMake 3.22以降とNinja

@@ -17,14 +17,14 @@ RoboCup SSL用ロボットの4輪ステアリング機体に搭載するメイ�
 
 ## 通信仕様と実装状況
 
-AtlasのMain―周辺基板間の具体的なID・payload・周期・予約は[CAN詳細案](design/atlas_can.md)と[ID一覧CSV](design/atlas_can_ids.csv)で管理します。最終決定前の案であり、現行コードへの実装完了を示しません。現在の推奨は[Classic 2軸16 bit集約](design/atlas_can_classic16.md)。[帯域・FD比較](design/atlas_can_bandwidth.md)のFD案は非採用の比較履歴です。
+AtlasのMain―周辺基板間の具体的なID・payload・周期・予約は[CAN詳細案](design/atlas_can.md)と[ID一覧CSV](design/atlas_can_ids.csv)で管理します。ステア基板とPCは通常CANを実装済みで、Main側のAtlas/C610制御は未実装です。[結合開発](atlas_bringup.md)に確認結果、車輪割当と開発順序を記載します。採用形式は[Classic 2軸16 bit集約](design/atlas_can_classic16.md)。[帯域・FD比較](design/atlas_can_bandwidth.md)のFD案は非採用の比較履歴です。
 
 | 対象 | 参照する契約・設計 | 本FWの状態 |
 |---|---|---|
 | CM4からの指令 | [共通コマンド](../specs/common/control_packet.md)、[4WSのモード・SPI設計案](../specs/proposals/control_modes.md) | 未実装。モードの採用設計と実際の受信・制御対応を区別する |
 | MainからCM4への帰還 | [共通128バイトfeedback](../specs/common/feedback_packet.md) | 採用設計あり。各項目の取得・格納、CRC生成、SPI送信は未実装 |
 | SPIの物理条件・転送手順 | [SPI設計案](../specs/proposals/control_modes.md#4ws-mainへのspi転送仮仕様) | 未実装。生成設定のSPI2はslave、CM4_CSはGPIO出力のため、設計案との対応確認が必要 |
-| CAN機器通信 | [Orion CAN契約](../specs/common/orion_can.md) | Classic CAN転送、電源API、Orion受信解析を実装。対応範囲とDLC制約は[基礎ドライバ](drivers.md#電源基板)・[CAN受信](peripherals.md#can受信)を参照。4WSのノード・車輪割当は未確定 |
+| CAN機器通信 | [Orion CAN契約](../specs/common/orion_can.md) | Classic CAN転送、電源API、Orion受信解析を実装。対応範囲とDLC制約は[基礎ドライバ](drivers.md#電源基板)・[CAN受信](peripherals.md#can受信)を参照。[ステアID/C610の論理割当](atlas_bringup.md#バスと車輪)を確認済み。物理ポート・車輪位置は結合時に照合 |
 
 共通feedbackの採用設計は、転送や制御の実装完了を示しません。現在のUART4ログ・SWD診断RAMは本repoの内部診断で、CM4向けfeedbackではありません。Orionの停止条件・UART・更新方式を4WSの確定仕様へ転用しません。文書の所有範囲は[管理境界](specs_migration.md)を参照してください。
 

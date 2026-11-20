@@ -17,11 +17,11 @@ feedback,8,4,m1_angle,i16,0.001,rad,0x8000,multi_turn
 feedback,8,6,m1_current,u16,0.001,A,0xFFFF,magnitude; never_clip_to_current_limit
 temperature,4,0,m0_temperature,i16,0.1,degC,0x8000,sensor_specification_TBD
 temperature,4,2,m1_temperature,i16,0.1,degC,0x8000,sensor_specification_TBD
-board_control,2,0,m0_request,u8,1,enum,,provisional; 0_coast; 1_angle; 2_duty; 3_initialize
-initial_calibration,8,0,m0_initial_angle,i16,0.001,rad,0x8000,provisional; SPI reference
-initial_calibration,8,2,m0_flags,u8,1,bits,,provisional; bit0_initial_valid; bit1_other_config_present
-initial_calibration,8,3,m0_state,u8,1,enum,,provisional; states_0_to_6
-board_control,2,1,m1_request,u8,1,enum,,provisional; 0_coast; 1_angle; 2_duty; 3_initialize
-initial_calibration,8,4,m1_initial_angle,i16,0.001,rad,0x8000,provisional; SPI reference
-initial_calibration,8,6,m1_flags,u8,1,bits,,provisional; bit0_initial_valid; bit1_other_config_present
-initial_calibration,8,7,m1_state,u8,1,enum,,provisional; states_0_to_6
+board_control,2,0,m0_request,u8,1,enum,,steering_implemented; 0_coast; 1_angle; 2_duty; 3_initialize
+initial_calibration,8,0,m0_initial_angle,i16,0.001,rad,0x8000,steering_implemented; SPI reference
+initial_calibration,8,2,m0_flags,u8,1,bits,,steering_implemented; bit0_initial_valid; bit1_other_config_present
+initial_calibration,8,3,m0_state,u8,1,enum,,steering_implemented; states_0_to_6
+board_control,2,1,m1_request,u8,1,enum,,steering_implemented; 0_coast; 1_angle; 2_duty; 3_initialize
+initial_calibration,8,4,m1_initial_angle,i16,0.001,rad,0x8000,steering_implemented; SPI reference
+initial_calibration,8,6,m1_flags,u8,1,bits,,steering_implemented; bit0_initial_valid; bit1_other_config_present
+initial_calibration,8,7,m1_state,u8,1,enum,,steering_implemented; states_0_to_6

@@ -1,5 +1,5 @@
 status,id_first,id_last,scope,direction,purpose,traffic_class,period,normal_periodic,send_on_change,notes
-confirmed_requirement,0x000,0x000,robot,all-to-all,error,event,event,false,false,existing power-compatible payload; board power/diagnostic notifications consolidated here; payload TBD
+confirmed_requirement,0x000,0x000,robot,all-to-all,error,event,event,false,false,DLC8; steering source axis u16 and detection code u16 and float32 zero; preserve legacy power semantics
 confirmed_id,0x120,0x120,axis_pair,main-to-steering,angle_target_with_limits,high,500Hz,true,true,first_axis=0; following odd ID unused; DLC8; current and duty limits; angle mode; send on limit change
 confirmed_id,0x122,0x122,axis_pair,main-to-steering,angle_target_with_limits,high,500Hz,true,true,first_axis=2; following odd ID unused; DLC8; current and duty limits; angle mode; send on limit change
 confirmed_id,0x130,0x130,axis_pair,main-to-steering,duty_target_with_limits,high,500Hz,true,true,first_axis=0; following odd ID unused; DLC8; current and duty limits; duty mode; send on limit change
@@ -8,15 +8,17 @@ confirmed_id,0x230,0x230,axis_pair,steering-to-main,spi_angle_current_feedback,h
 confirmed_id,0x232,0x232,axis_pair,steering-to-main,spi_angle_current_feedback,high,500Hz,true,false,first_axis=2; following odd ID unused; DLC8; SPI steering angle; current magnitude
 confirmed_id,0x290,0x290,axis_pair,steering-to-main,temperature,low,1Hz,true,false,first_axis=0; following odd ID unused; DLC4; NTC conversion and thresholds TBD
 confirmed_id,0x292,0x292,axis_pair,steering-to-main,temperature,low,1Hz,true,false,first_axis=2; following odd ID unused; DLC4; NTC conversion and thresholds TBD
-confirmed_id,0x350,0x350,axis_pair,main-to-steering,board_control,medium,10Hz,true,true,first_axis=0; following odd ID unused; DLC2 requested states; steering implemented; Main and PC pending; send on change; timeout500ms
-confirmed_id,0x352,0x352,axis_pair,main-to-steering,board_control,medium,10Hz,true,true,first_axis=2; following odd ID unused; DLC2 requested states; steering implemented; Main and PC pending; send on change; timeout500ms
-confirmed_id,0x510,0x510,axis_pair,steering-to-main,spi_initial_calibration,low,approximately_1Hz,true,false,first_axis=0; 0x511 unused; DLC8; steering implemented; Main and PC pending; initial SPI angles; other config flags; states; avoids existing update IDs
-confirmed_id,0x512,0x512,axis_pair,steering-to-main,spi_initial_calibration,low,approximately_1Hz,true,false,first_axis=2; 0x513 unused; DLC8; steering implemented; Main and PC pending; initial SPI angles; other config flags; states; avoids existing update IDs
-candidate,0x3D0,0x3D1,board,host-to-steering,diagnostics,debug,TBD,false,false,optional ID candidate; reply format and debug region TBD
+confirmed_id,0x350,0x350,axis_pair,main-to-steering,board_control,medium,10Hz,true,true,first_axis=0; following odd ID unused; DLC2 requested states; steering and PC implemented; Main pending; send on change; timeout500ms
+confirmed_id,0x352,0x352,axis_pair,main-to-steering,board_control,medium,10Hz,true,true,first_axis=2; following odd ID unused; DLC2 requested states; steering and PC implemented; Main pending; send on change; timeout500ms
+confirmed_id,0x510,0x510,axis_pair,steering-to-main,spi_initial_calibration,low,approximately_1Hz,true,false,first_axis=0; 0x511 unused; DLC8; steering and PC implemented; Main pending; initial SPI angles; other config flags; states; avoids existing update IDs
+confirmed_id,0x512,0x512,axis_pair,steering-to-main,spi_initial_calibration,low,approximately_1Hz,true,false,first_axis=2; 0x513 unused; DLC8; steering and PC implemented; Main pending; initial SPI angles; other config flags; states; avoids existing update IDs
+confirmed_device,0x200,0x200,per_bus,main-to-c610,c610_group_current,high,TBD,true,false,DLC8 big endian signed mA slots 1 through 4; send on each bus; unused slots zero
+confirmed_device,0x201,0x202,board_0_bus,c610-to-main,c610_feedback,high,1kHz_default,true,false,DLC8 big endian; C610 IDs 1 and 2 on board ID 0 side
+confirmed_device,0x203,0x204,board_1_bus,c610-to-main,c610_feedback,high,1kHz_default,true,false,DLC8 big endian; C610 IDs 3 and 4 on board ID 1 side
 existing_reserved,0x480,0x4FF,robot,update,orion_update_data,update,event,false,false,do not allocate independent steering update IDs here
 existing_reserved,0x500,0x503,robot,steering-to-main,orion_motor_parameters,legacy,TBD,false,false,existing Orion parameter feedback; not available for Atlas calibration
-existing_reserved,0x5D0,0x5D1,board,host-steering,steering_debug_rpc_offset0,debug,event,false,false,current CAN debug request/reply; future drive uses normal CAN commands
-existing_reserved,0x5E0,0x5E1,board,host-steering,steering_debug_rpc_offset16,debug,event,false,false,current CAN debug request/reply; future drive uses normal CAN commands
+existing_reserved,0x5D0,0x5D1,board,host-steering,steering_debug_rpc_offset0,debug,event,false,false,maintenance RPC; driving uses normal CAN commands
+existing_reserved,0x5E0,0x5E1,board,host-steering,steering_debug_rpc_offset16,debug,event,false,false,maintenance RPC; driving uses normal CAN commands
 existing_steering_update,0x600,0x602,board,update,steering_legacy_update_offset0,update,event,false,false,preserve existing updater; no calibration notifications here
 existing_steering_update,0x610,0x612,board,update,steering_legacy_update_offset16,update,event,false,false,preserve existing updater; overlap with Orion update contract is a separate migration issue
 existing_reserved,0x610,0x611,robot,update,orion_update_command_version,update,event,false,false,preserve existing contract
