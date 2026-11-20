@@ -140,4 +140,4 @@ python ./Script/test_drivers.py --cc "C:/Program Files/LLVM/bin/clang.exe"
 
 CANの2バス独立性・送信順序・20フレーム満杯・HAL失敗後再試行・受信形式検証、UARTのDMAバッファ寿命・容量制限・RX満杯・エラー復帰、ADCの未取得／更新停止／異常、SWの全境界、全1～20000 Hzの周波数計算、タイマーAPB分周、時刻周回時のブザー停止、電源バイト列と片側送信受理を確認する。生成コードとのHAL API整合はSTM32向けDebug／Releaseビルドで確認する。
 
-HALモックはIRQの実時間競合や電気的な通信を再現しない。実際のUART受信負荷、CAN bus-offやACK、PWM端子波形、SW押下値は未検証。ビルドと試験の結果は[開発手順](development.md)に記録する。
+HALモックはIRQの実時間競合や電気的な通信を再現しない。実際のUART受信負荷、CAN bus-offやACK、PWM端子波形、SW押下値は未検証。ビルドと試験の結果は[検証記録](records/README.md)に記録する。

@@ -42,8 +42,14 @@ SW7のコードを **3** に設定する。旧Orionのモーター試験の番�
 
 - Atlas/C610のIDはバスとDLCで振り分け、Orionの重複IDを復号しない。CAN1の電源電圧は4/8バイトを受理する。
 - 角度指令はメインループから2 ms間隔を目標に送り、C610速度PIは10 ms間隔を目標に実行する。C610は3サンプル以上、最終受信から50 ms未満、始動時に40 rpm以下を必要とする。Atlasの高速帰還は150 ms未満、校正通知は2.5秒未満を必要とする。C610のPI・フィードフォワードとランプはPC版の既定値を使用する。
-- MainとPC代役の指令は切り替えて使う。Mainを使う試験では、車輪を浮かせた状態で対象輪と正負方向、解放・通信断での停止、電源基板との混在を確認する。C610指令の未使用スロットが0 Aであることと、共通エラーを受けたときに両バスへの停止が届くことをキャプチャで照合する。
-- OLED・UART・電源通信を含め、RXキュー破棄、C610帰還の最長間隔、Mainからの送信間隔を計測する。SWDでCPUを止める読取りは周期評価に使用しない。[Mainの既存診断](peripherals.md)
+
+### 実機結合の手順
+
+1. [書き込み手順](development.md#st-link書き込み)でMainの構成、ELF、対象ST-Linkを照合する。車輪を浮かせ、CAN1／CAN2とステア基板ID・C610 ID・電源基板の接続先を確認する。PCが指令を出す試験とMainが指令を出す試験は切り替えて行う。
+2. まず駆動せずに両バスを採取し、ステアの角度・校正通知、対象C610の帰還、CAN1の電源電圧を確認する。OLEDのSW7コード表示を確認し、UARTの受信数・破棄数・bus-offの基準値を記録する。
+3. 単輪を選択し、中央で初期化して左右の角度指令、上下の速度指令を確認する。対象輪と正負方向、解放時のcoast／0 Aと実際の停止を記録する。全輪の単輪確認を終えてから四輪操作を確認する。
+4. 電源基板・OLED・UARTを含む構成で、モード離脱、帰還途絶、共通エラー時の停止を試験条件に応じて確認する。CANログでは両バスの停止指令、未使用スロットの0 A、帰還の最長間隔とMainの送信間隔を照合する。
+5. 試験終了時は全ボタンを解放し、モーターデバッグを解除して停止を確認する。SWDによる診断RAM読取りは駆動・周期計測の終了後に行う。FW、基板、試験条件、ログ、結果は[検証記録](records/README.md)に残す。
 
 ## 再現用ツール
 
@@ -51,9 +57,12 @@ SW7のコードを **3** に設定する。旧Orionのモーター試験の番�
 - Mainの結合時は別のUSB-CANを受信監視に使い、CANRushで両バスを同じCSVに採る。既にCANRush Serverへ接続したバスを取得する例。出力先はMainFWのルートからの相対パス。
 
 ```powershell
+New-Item -ItemType Directory -Force ./build/hardware | Out-Null
 canrush --server 127.0.0.1:49000 capture --all-buses --duration 12s --output build/hardware/atlas.csv
 python ./Script/analyze_atlas_can.py build/hardware/atlas.csv --output build/hardware/atlas-report.json
-python ./Script/estimate_atlas_can.py --c610-command-hz 500
+python ./Script/estimate_atlas_can.py --c610-command-hz 100
 ```
+
+帯域試算の100 HzはMainのモーターデバッグでのC610指令周期。出力は `classic16_pair` の行を参照し、電源なしの `bus A` をCAN2、電源ありの `bus B+power` をCAN1のモデルとして読む。将来の500 Hz指令と比較する場合は `--c610-command-hz 500` を指定する。
 
 `analyze_atlas_can.py`はオフラインでCANRushのフレームCSVを解析する。バス／ID／DLCごとの件数、平均Hz、P99・最大間隔、50 ms以上の回数、主要帰還の最終値をJSONに出す。`board_buses`はDLC 8の`0x230/0x232`から推定した候補で、Flash IDの読戻しではない。該当IDの複数バス出現、`shared_board_bus`、`bus_matches`、`missing_periodic_ids`を照合する。監視時間が短いと低速通知を取り逃す。C610の実電流はraw値。間隔はPCのCSV時刻（通常ミリ秒単位）で、CAN線上のタイミングやフレーム欠落の保証には使えない。

@@ -22,7 +22,7 @@
 | Main―周辺基板のDLC・byte配置・opcode・CRC・分割・周期・帯域・校正転送 | 同上。まだID最終決定前・未実装 |
 | Mainの受理条件・Orion解析との対応差 | [CAN受信](peripherals.md#can受信)、[基礎ドライバ](drivers.md) |
 | ピン・HAL・DMA・IRQ・バッファ・モジュール・ビルド | [ハードウェア](hardware.md)、[コード階層](architecture.md)、[開発](development.md) |
-| 検証記録・旧実装調査 | [開発](development.md)、[互換調査](driver_compatibility.md) |
+| 検証記録・旧実装調査 | [検証記録](records/README.md)、[互換調査](driver_compatibility.md) |
 
 ステアFWも同じCAN詳細を参照し、別のID表を手動で保守しない。共通の角度意味とCAN上の単位が異なる場合は、変換責務を接続仕様へ明記する。
 MainのCAN接続仕様がspecsにある上位・停止・互換性要件を変更する場合は、specs側も同時に更新する。

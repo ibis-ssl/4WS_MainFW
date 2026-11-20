@@ -18,7 +18,7 @@ CANはVIO修正後の2026-10-09に両バスの実機受信とOrion形式の解�
 
 通常モードの機体制御用入口はTIM6割り込みから500 Hz（2 ms）で呼びます。モーターデバッグの周期処理とUART4の10 Hz状態表示はメインループで実行します。
 
-ユーザーコードは`Application/`に配置します。実装仕様とAPIは[基礎ドライバ](doc/drivers.md)、追加機器は[CAN・IMU・OLED](doc/peripherals.md)、配置方針は[コード階層](doc/architecture.md)を参照してください。電源指令は自動送信せず、起動ブザーを2 kHzで100 ms鳴らした後、出力をLowへ戻します。実機検証の結果と未確認範囲は[開発手順](doc/development.md)に記録します。
+ユーザーコードは`Application/`に配置します。実装仕様とAPIは[基礎ドライバ](doc/drivers.md)、追加機器は[CAN・IMU・OLED](doc/peripherals.md)、配置方針は[コード階層](doc/architecture.md)を参照してください。電源指令は自動送信せず、起動ブザーを2 kHzで100 ms鳴らした後、出力をLowへ戻します。実機確認の条件と結果は[検証記録](doc/records/README.md)にまとめています。
 
 BATT_Vは10 kΩ/1 kΩ分圧（電池電圧はADC端子電圧の11倍）です。BATT_V取得とCM4通信処理は未実装で、機器間の通信条件と未決事項は[specsの設計案](specs/proposals/control_modes.md)で管理します。
 
@@ -36,6 +36,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./Script/build.ps1 -Configur
 成果物は`build/Debug/`に生成されます。Releaseビルド、クリーンビルド、書き込み方法は[開発手順](doc/development.md)を参照してください。
 
 ## 文書
+
+[文書案内](doc/README.md)から現行仕様と作業手順を参照できます。現在の未確認事項は[実装・検証計画](doc/implementation_plan.md)にまとめています。
 
 複数レイヤー・リポジトリにまたがる通信契約は、submoduleの[共通仕様](specs/README.md)を参照します。未実装の4WS通信・制御案は[設計案](specs/proposals/README.md)、このFWの対応範囲・差異・内部実装・検証結果は`doc/`で管理します。[管理境界](doc/specs_migration.md)と[仕様の取得・更新手順](doc/development.md#共通仕様リポジトリ)を参照してください。
 

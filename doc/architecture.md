@@ -70,7 +70,7 @@ UARTの整形関数名は`p()`とし、main側で常時10 Hz実行する。`p()`
 
 `MX_GPIO_Init()`完了後に使用する。戻り値はAPI処理の成否で、端子の電気的な正常性は示さない。点灯・押下の極性、デバウンス、DIP値からモードへの変換は含まない。`U_BTN`はアナログ入力なので本APIの対象外。CM4_CS、SPI_IMU_CS、PWM、無名ピンも対象外。
 
-GPIO APIはビルド対象へ登録済み。Appは全High点灯として、0→1→2→3→R→G→Bを各200 msで繰り返し、mainで切り替える。SW・DIPの回路上の極性は[ハードウェア](hardware.md#スイッチの対応とio設定)、LED出力の確認結果と目視未確認の範囲は[検証記録](development.md#動作中ledの繰り返し点灯2026-10-10)を参照する。
+GPIO APIはビルド対象へ登録済み。Appは全High点灯として、0→1→2→3→R→G→Bを各200 msで繰り返し、mainで切り替える。SW・DIPの回路上の極性は[ハードウェア](hardware.md#スイッチの対応とio設定)、LED出力の確認結果と目視未確認の範囲は[検証記録](records/development_history.md#動作中ledの繰り返し点灯2026-10-10)を参照する。
 
 CAN、UART4、ブザー、U_BTNの基礎ドライバは起動処理へ接続済み。GPIOのLED APIはAppの起動表示から操作する。ADC1の取得対象はU_BTNだけに変更した。SPI2スレーブに対してCM4_CSが出力である点は未解決で、CM4通信は未実装。
 

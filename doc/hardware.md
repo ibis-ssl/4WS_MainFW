@@ -20,7 +20,7 @@
 
 `Application/Board/board_gpio.c/.h`にDIP_0～3、SW_90、SW_1、SW_2、IMU_FSYNCの生レベル取得と、LED_0～3・LED_R/G/Bの端子レベル設定を実装しています。生成された`main.h`のピン定義を利用し、入力はHigh/Low、出力はHigh/Low指定として扱います。LED APIはAppのLED循環表示から使用し、ユーザー指定により全LEDをHigh点灯として扱います。SWとDIPの回路上の極性は下記に記録しますが、APIは押下や選択値への変換を行いません。IMU_FSYNCの有効極性と各入力の用途は未確定です。
 
-Classic CAN、旧電源基板、UART4デバッグ、ブザー、U_BTN取得・判定を実装済みです。2026-10-08の接続情報に基づき、Orion CAN受信解析、SPI1のICM-20602取得、I2C1のSH1106表示を追加しました。CM4 SPIとアクチュエーター出力系は未実装です。[基礎ドライバ](drivers.md)と[CAN・IMU・OLED](peripherals.md)に実装仕様、[開発手順](development.md)に検証結果を記載しています。
+Classic CAN、旧電源基板、UART4デバッグ、ブザー、U_BTN取得・判定を実装済みです。2026-10-08の接続情報に基づき、Orion CAN受信解析、SPI1のICM-20602取得、I2C1のSH1106表示を追加しました。Atlas/C610のCAN配線と操作は[結合手順](atlas_bringup.md)、CM4 SPIの現状は[通信仕様](overview.md#通信仕様と実装状況)、実機試験の結果は[検証記録](records/README.md)を参照してください。
 
 CAN、デバッグUART、ブザー、ユーザーSWの調査時点の比較は[ドライバ互換調査](driver_compatibility.md)を参照してください。以降の表は生成設定とBoardの実行時設定を記録します。CANのClassic化とADCのU_BTN取得は`.ioc`・生成コードへ反映済みです。DMA・NVICはBoardが実行時に設定します。
 
@@ -143,7 +143,7 @@ PA0～PA3はアナログ設定ですが、regular conversionはADC1_IN3（PA2、
 
 ### FDCAN
 
-2026-10-08のVIO誤配線はユーザーが修正し、2026-10-09に両CANの実受信を確認した。CAN2ではソフトウェア受信キュー満杯による破棄が継続している。測定条件・受信ID・未確認範囲は[開発手順](development.md)を参照。
+2026-10-08のVIO誤配線はユーザーが修正し、2026-10-09に両CANの実受信を確認した。試験時はCAN2でソフトウェア受信キュー満杯による破棄が継続した。測定条件・受信ID・未確認範囲は[検証記録](records/development_history.md#can-vio修正後の実機受信確認2026-10-09)を参照。
 
 両FDCANはClassic CANで、170 MHz、prescaler 10、time segment 1/2が14/2、SJW=1で1 Mbit/sになります。data phase設定はClassicでは使用しません。トランシーバー、終端、配線、HSI起点の通信精度は実機で未確認です。
 
