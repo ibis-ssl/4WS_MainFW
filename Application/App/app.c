@@ -5,6 +5,7 @@
 #include "App/app.h"
 #include "Board/board_can.h"
 #include "Board/board_debug_uart.h"
+#include "Board/board_debug_rtt.h"
 #include "Board/board_user_adc.h"
 #include "Board/board_buzzer.h"
 #include "Device/user_switch.h"
@@ -45,6 +46,7 @@ static void led_sequence_process(void)
 }
 bool app_init(void)
 {
+    board_debug_rtt_init();
     if (!board_debug_uart_init() || !board_user_adc_init() || !board_can_init() || !board_buzzer_init()) {
         return false;
     }

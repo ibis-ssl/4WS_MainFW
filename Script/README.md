@@ -12,6 +12,7 @@
 | `estimate_atlas_can.py` | CAN帯域の試算。Mainのデバッグ周期での試算には `--c610-command-hz 100` |
 | `read_monitor.py` | `app_monitor_status` のSWD読取り。 `--serial` 必須、`--elf` で実機に書いたELFを指定 |
 | `read_oled_timing.py` | OLED計測RAMのSWD読取り。 `--serial` 必須、`--elf` と `--output` を指定可能 |
+| `openocd_main_rtt.cfg` | MainのRTTチャネル0をローカルTCPへ公開。[RTT接続と試験](../doc/atlas_bringup.md#mainのrtt) |
 | `common.ps1` | PowerShellスクリプト共通のツール探索・実行処理 |
 
 書き込みと再生成は[開発手順](../doc/development.md)、CAN採取と読取りの使い分けは[結合手順](../doc/atlas_bringup.md)を参照する。SWD読取りスクリプトはCPUを一時停止し、終了時に再開を試みる。

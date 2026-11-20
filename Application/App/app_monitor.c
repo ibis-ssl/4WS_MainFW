@@ -67,14 +67,12 @@ void app_monitor_process(void)
     app_monitor_status.sequence++;
     if (!oled_begin()) { return; }
     char line[32];
-    motor_debug_status_t motor = app_motor_debug_status();
-    if (motor.state == MOTOR_DEBUG_OFF) {
+    motor_debug_state_t motor = app_motor_debug_status();
+    if (motor == MOTOR_DEBUG_OFF) {
         (void)oled_text(0, 0, "4WS RX DIAGNOSTICS");
     } else {
         static const char *const states[] = {"", "WAIT", "READY", "STEER", "DRIVE", "INIT", "STOP", "FAULT"};
-        const char *const targets[] = {"g0", "g1", "g2", "g3", "ALL"};
-        const char *target = motor.state == MOTOR_DEBUG_DRIVE ? "ALL" : targets[motor.wheel];
-        (void)snprintf(line, sizeof(line), "MOTOR %s %s", target, states[motor.state]);
+        (void)snprintf(line, sizeof(line), "MOTOR ALL %s", states[motor]);
         (void)oled_text(0, 0, line);
     }
     for (unsigned int bus = 0; bus < 2U; ++bus) {

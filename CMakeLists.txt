@@ -53,6 +53,7 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Application/Board/board_can.c
     Application/Board/board_control_timer.c
     Application/Board/board_debug_uart.c
+    Application/Board/board_debug_rtt.c
     Application/Board/board_gpio.c
     Application/Board/board_imu_spi.c
     Application/Board/board_oled_i2c.c

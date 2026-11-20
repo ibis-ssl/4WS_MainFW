@@ -1,17 +1,21 @@
 #include "App/app_motor_debug.h"
 #include "Board/board_gpio.h"
+#include "Board/board_debug_rtt.h"
 #include "Board/board_time.h"
 #include "Device/user_switch.h"
 #include "Protocol/atlas_motor_packet.h"
 #include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 enum {
-    WHEEL_COUNT = 4, ALL_WHEELS = WHEEL_COUNT, ALL_WHEEL_MASK = (1U << WHEEL_COUNT) - 1U,
-    DEBUG_MODE_CODE = 3,
+    WHEEL_COUNT = 4, ALL_WHEEL_MASK = (1U << WHEEL_COUNT) - 1U, DEBUG_MODE_CODE = 3,
     DEBOUNCE_MS = 30, ATLAS_PERIOD_MS = 2, STATE_PERIOD_MS = 100, DRIVE_PERIOD_MS = 10,
     ATLAS_TIMEOUT_MS = 150, CALIBRATION_TIMEOUT_MS = 2500, DRIVE_TIMEOUT_MS = 50,
     LOOP_TIMEOUT_MS = 100, INITIALIZE_TIMEOUT_MS = 30000,
-    TARGET_MRAD = 262, TARGET_ROTOR_RPM = 300, STOPPED_RPM = 40, MAX_ROTOR_RPM = 18000
+    RANGE_READ_MS = 50, RANGE_FIELD_COUNT = 3, RANGE_READ_COUNT = 2 * RANGE_FIELD_COUNT,
+    RTT_DRIVE_MS = 2200,
+    TARGET_ROTOR_RPM = 300, STOPPED_RPM = 40, MAX_ROTOR_RPM = 18000
 };
 
 typedef struct {
@@ -20,41 +24,104 @@ typedef struct {
     uint8_t samples;
     float filtered_rpm;
     float integral;
+    int16_t command_ma;
 } wheel_t;
+
+typedef struct {
+    int16_t lower_mrad, upper_mrad;
+    float target_mrad;
+} steer_range_t;
 
 typedef struct {
     atlas_axis_feedback_t axes[2];
     atlas_axis_calibration_t calibration[2];
+    steer_range_t range[2];
+    int32_t axis_read[RANGE_FIELD_COUNT];
     uint32_t feedback_ms, calibration_ms;
-    bool seen, calibrated_message;
+    uint32_t range_request_ms;
+    uint8_t range_step, range_sequence, rpc_offset;
+    bool seen, calibrated_message, range_pending;
 } steering_t;
 
 static wheel_t wheels[WHEEL_COUNT];
 static steering_t steering[BOARD_CAN_COUNT];
-static unsigned int selected;
 static motor_debug_state_t motion;
 static user_switch_t raw_key, running_key;
-static bool raw_mode, raw_select, mode_active, neutral_seen;
-static bool fault, fault_handled, interrupted;
+static bool raw_mode, mode_active, neutral_seen;
+static bool fault, fault_handled, interrupted, rtt_drive;
 static uint8_t init_waiting, init_observed;
 static uint8_t stop_repeats[BOARD_CAN_COUNT];
 static uint32_t mode_at, input_at, motion_at, last_process, last_state, last_angle, last_drive, last_stop;
 static float ramped_rpm;
 
-/* CAN1は基板0とC610 ID 1/2、CAN2は基板1とC610 ID 3/4。 */
-static unsigned int selected_mask(void)
-{
-    return selected == ALL_WHEELS ? ALL_WHEEL_MASK : 1U << selected;
-}
-
-static unsigned int board_mask(unsigned int bus)
-{
-    return 3U << (2U * bus);
-}
-
 static bool fresh(uint32_t now, uint32_t at, uint32_t timeout)
 {
     return now - at < timeout;
+}
+
+static void invalidate_range(steering_t *board)
+{
+    board->range_step = 0;
+    board->range_pending = false;
+}
+
+static float limit_target(float target, const steer_range_t *range)
+{
+    return fmaxf(range->lower_mrad, fminf(range->upper_mrad, target));
+}
+
+static void accept_range(steering_t *board, const board_can_frame_t *frame)
+{
+    if (!board->range_pending || frame->id != 0x5D1U + board->rpc_offset ||
+        frame->length != 8U || !fresh(frame->received_ms, board->range_request_ms, RANGE_READ_MS)) { return; }
+    unsigned int axis = board->range_step / RANGE_FIELD_COUNT;
+    unsigned int field = board->range_step % RANGE_FIELD_COUNT;
+    if (!atlas_decode_axis_read(frame->data, (uint8_t)axis, board->range_sequence, &board->axis_read[field])) {
+        return;
+    }
+    board->range_pending = false;
+    if (field == RANGE_FIELD_COUNT - 1U) {
+        const float mrad_per_mdeg = 0.01745329252f;
+        /* 両端から30度内側。RPCのmdeg切捨てと指令の整数mrad化を内向きに丸める。 */
+        int32_t lower = (int32_t)ceilf(((float)board->axis_read[0] + 30001.0f) * mrad_per_mdeg);
+        int32_t upper = (int32_t)floorf(((float)board->axis_read[1] - 30001.0f) * mrad_per_mdeg);
+        if (lower < -INT16_MAX || upper > INT16_MAX || lower > upper) { invalidate_range(board); return; }
+        steer_range_t *range = &board->range[axis];
+        range->lower_mrad = (int16_t)lower;
+        range->upper_mrad = (int16_t)upper;
+        range->target_mrad = limit_target((float)board->axis_read[2] * mrad_per_mdeg, range);
+    }
+    board->range_step++;
+}
+
+static bool steering_fresh(const steering_t *board, uint32_t now)
+{
+    return board->seen && fresh(now, board->feedback_ms, ATLAS_TIMEOUT_MS) &&
+        board->calibrated_message && fresh(now, board->calibration_ms, CALIBRATION_TIMEOUT_MS);
+}
+
+static void read_ranges(uint32_t now)
+{
+    static const uint8_t fields[] = {7, 8, 3};
+    for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
+        steering_t *board = &steering[bus];
+        if (!steering_fresh(board, now) || !board->calibration[0].initialized ||
+            !board->calibration[1].initialized) { invalidate_range(board); continue; }
+        if (board->range_step == RANGE_READ_COUNT) { continue; }
+        if (board->range_pending && fresh(now, board->range_request_ms, RANGE_READ_MS)) { continue; }
+        if (board->range_pending) {
+            /* 保守offsetは基板IDと独立しており、既存FWの0/16を非同期に照会する。 */
+            board->rpc_offset ^= 16U;
+            board->range_pending = false;
+        }
+        uint8_t data[8];
+        atlas_encode_axis_read(data, board->range_step / RANGE_FIELD_COUNT,
+                              ++board->range_sequence, fields[board->range_step % RANGE_FIELD_COUNT]);
+        if (board_can_send_immediate((board_can_bus_t)bus, (uint16_t)(0x5D0U + board->rpc_offset), data, 8)) {
+            board->range_request_ms = now;
+            board->range_pending = true;
+        }
+    }
 }
 
 bool app_motor_debug_accept(board_can_bus_t bus, const board_can_frame_t *frame)
@@ -67,13 +134,16 @@ bool app_motor_debug_accept(board_can_bus_t bus, const board_can_frame_t *frame)
     const unsigned int first = 2U * bus;
     const uint32_t at = frame->received_ms;
     steering_t *board = &steering[bus];
+    if (frame->id == 0x5D1U || frame->id == 0x5E1U) {
+        accept_range(board, frame);
+        return true;
+    }
     if (frame->id == 0x230U + first) {
         if (frame->length != 8U) { return true; }
         if (board->seen && !fresh(at, board->feedback_ms, ATLAS_TIMEOUT_MS)) {
             board->calibrated_message = false;
-            if (motion == MOTOR_DEBUG_DRIVE || (selected_mask() & board_mask(bus)) != 0U) {
-                interrupted = true;
-            }
+            invalidate_range(board);
+            interrupted = true;
         }
         atlas_decode_feedback(frame->data, board->axes);
         board->feedback_ms = at;
@@ -95,6 +165,7 @@ bool app_motor_debug_accept(board_can_bus_t bus, const board_can_frame_t *frame)
             const atlas_axis_calibration_t *cal = &board->calibration[axis];
             uint8_t bit = (uint8_t)(1U << (first + axis));
             if (cal->state == 6U) { fault = true; }
+            if (!cal->initialized || cal->state == 2U) { invalidate_range(board); }
             if (motion != MOTOR_DEBUG_INIT || (init_waiting & bit) == 0U) { continue; }
             if (cal->state == 2U) { init_observed |= bit; }
             if ((init_observed & bit) != 0U && cal->initialized && cal->state == 3U) {
@@ -159,6 +230,8 @@ static void begin_stop(uint32_t now)
 {
     motion = MOTOR_DEBUG_OFF;
     neutral_seen = false;
+    rtt_drive = false;
+    for (unsigned int i = 0; i < WHEEL_COUNT; ++i) { wheels[i].command_ma = 0; }
     last_stop = now - DRIVE_PERIOD_MS;
     for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
         board_can_cancel_immediate((board_can_bus_t)bus);
@@ -181,19 +254,14 @@ static void send_stops(uint32_t now)
 
 static bool motion_ready(motor_debug_state_t action, uint32_t now, bool starting)
 {
-    /* 速度デバッグではSW9の操舵対象にかかわらず4輪を監視する。 */
-    unsigned int mask = action == MOTOR_DEBUG_DRIVE ? ALL_WHEEL_MASK : selected_mask();
     for (unsigned int i = 0; i < WHEEL_COUNT; ++i) {
-        if ((mask & (1U << i)) == 0U) { continue; }
         const steering_t *board = &steering[i / 2U];
         const atlas_axis_calibration_t *cal = &board->calibration[i % 2U];
-        if (!board->seen || !fresh(now, board->feedback_ms, ATLAS_TIMEOUT_MS) ||
-            !board->calibrated_message || !fresh(now, board->calibration_ms, CALIBRATION_TIMEOUT_MS)) {
-            return false;
-        }
+        if (!steering_fresh(board, now)) { return false; }
         if ((action != MOTOR_DEBUG_INIT || starting) && cal->state == 2U) { return false; }
         if ((action == MOTOR_DEBUG_STEER || action == MOTOR_DEBUG_DRIVE) &&
             (!cal->initialized || board->axes[i % 2U].angle_mrad == INT16_MIN)) { return false; }
+        if (action == MOTOR_DEBUG_STEER && board->range_step != RANGE_READ_COUNT) { return false; }
         if (action == MOTOR_DEBUG_DRIVE) {
             const wheel_t *wheel = &wheels[i];
             int rpm = wheel->feedback.rpm;
@@ -212,12 +280,15 @@ static void begin_motion(motor_debug_state_t action, user_switch_t key, uint32_t
     running_key = key;
     motion_at = now;
     last_state = now - STATE_PERIOD_MS;
-    last_angle = now - ATLAS_PERIOD_MS;
+    last_angle = now;
     last_drive = now;
     interrupted = false;
-    init_waiting = (uint8_t)selected_mask();
+    init_waiting = ALL_WHEEL_MASK;
     init_observed = 0;
     ramped_rpm = 0.0f;
+    if (action == MOTOR_DEBUG_INIT) {
+        for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) { invalidate_range(&steering[bus]); }
+    }
     for (unsigned int i = 0; i < WHEEL_COUNT; ++i) {
         wheels[i].integral = 0.0f;
         if (!steering[i / 2U].calibration[i % 2U].initialized) {
@@ -252,7 +323,8 @@ static bool send_drive(uint32_t now)
     for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
         uint8_t data[8] = {0};
         for (unsigned int i = 2U * bus; i < 2U * bus + 2U; ++i) {
-            c610_encode_current(data, i, drive_current(&wheels[i], dt));
+            wheels[i].command_ma = drive_current(&wheels[i], dt);
+            c610_encode_current(data, i, wheels[i].command_ma);
         }
         if (!board_can_send_immediate((board_can_bus_t)bus, 0x200U, data, 8)) { return false; }
     }
@@ -263,15 +335,16 @@ static bool send_steering(uint32_t now)
 {
     bool control_due = !fresh(now, last_state, STATE_PERIOD_MS);
     bool angle_due = motion == MOTOR_DEBUG_STEER && !fresh(now, last_angle, ATLAS_PERIOD_MS);
-    unsigned int mask = selected_mask();
+    /* 90度/秒を実経過msで積分し、軸別の許容範囲で目標を止める。 */
+    float delta_mrad = (running_key == USER_SWITCH_LEFT ? -1.570796327f : 1.570796327f) *
+        (float)(now - last_angle);
     if (control_due) { last_state = now; }
     if (angle_due) { last_angle = now; }
     for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
-        if ((mask & board_mask(bus)) == 0U) { continue; }
         unsigned int first = 2U * bus;
         if (control_due) {
             uint8_t data[8] = {0};
-            unsigned int active = motion == MOTOR_DEBUG_INIT ? init_waiting : mask;
+            unsigned int active = motion == MOTOR_DEBUG_INIT ? init_waiting : ALL_WHEEL_MASK;
             for (unsigned int axis = 0; axis < 2U; ++axis) {
                 if ((active & (1U << (first + axis))) != 0U) {
                     data[axis] = motion == MOTOR_DEBUG_INIT ? ATLAS_INITIALIZE : ATLAS_ANGLE;
@@ -281,9 +354,10 @@ static bool send_steering(uint32_t now)
         }
         if (angle_due) {
             uint8_t data[8] = {0};
-            int16_t target = running_key == USER_SWITCH_LEFT ? -TARGET_MRAD : TARGET_MRAD;
             for (unsigned int axis = 0; axis < 2U; ++axis) {
-                if ((mask & (1U << (first + axis))) != 0U) { atlas_encode_angle(data, axis, target); }
+                steer_range_t *range = &steering[bus].range[axis];
+                range->target_mrad = limit_target(range->target_mrad + delta_mrad, range);
+                atlas_encode_angle(data, axis, (int16_t)lroundf(range->target_mrad));
             }
             if (!board_can_send_immediate((board_can_bus_t)bus, (uint16_t)(0x120U + first), data, 8)) {
                 return false;
@@ -291,6 +365,63 @@ static bool send_steering(uint32_t now)
         }
     }
     return true;
+}
+
+static void rtt_status(uint32_t now)
+{
+    unsigned int cal = 0, esc = 0, ranges = 0;
+    for (unsigned int i = 0; i < WHEEL_COUNT; ++i) {
+        const steering_t *board = &steering[i / 2U];
+        const wheel_t *wheel = &wheels[i];
+        if (steering_fresh(board, now) && board->calibration[i % 2U].initialized &&
+            board->axes[i % 2U].angle_mrad != INT16_MIN) { cal |= 1U << i; }
+        if (wheel->samples >= 3U && fresh(now, wheel->received_ms, DRIVE_TIMEOUT_MS)) { esc |= 1U << i; }
+        if (board->range_step == RANGE_READ_COUNT) { ranges |= 1U << i; }
+    }
+    char line[192];
+    int length = snprintf(line, sizeof(line),
+        "MAIN ms=%lu mode=%u state=%u cal=%X esc=%X range=%X target=%d rpm=%d,%d,%d,%d ma=%d,%d,%d,%d\n",
+        (unsigned long)now, (unsigned int)mode_active, (unsigned int)app_motor_debug_status(), cal, esc, ranges,
+        motion == MOTOR_DEBUG_DRIVE ? (int)lroundf(ramped_rpm) : 0,
+        wheels[0].feedback.rpm, wheels[1].feedback.rpm, wheels[2].feedback.rpm, wheels[3].feedback.rpm,
+        wheels[0].command_ma, wheels[1].command_ma, wheels[2].command_ma, wheels[3].command_ma);
+    if (length > 0 && (size_t)length < sizeof(line)) { board_debug_rtt_write(line); }
+}
+
+static void rtt_process(uint32_t now, user_switch_t key)
+{
+    static char command[12];
+    static size_t length;
+    static bool discard;
+    uint8_t byte;
+    for (unsigned int n = 0; n < 32U && board_debug_rtt_read(&byte); ++n) {
+        if (byte == '\r') { continue; }
+        if (byte != '\n') {
+            if (length == sizeof(command) - 1U || byte == 0U) { discard = true; }
+            if (!discard) { command[length++] = (char)byte; }
+            continue;
+        }
+        command[length] = '\0';
+        length = 0;
+        if (discard) { discard = false; continue; }
+        if (strcmp(command, "status") == 0) { rtt_status(now); continue; }
+        if (strcmp(command, "stop") == 0) {
+            if (motion != MOTOR_DEBUG_OFF) { begin_stop(now); }
+            board_debug_rtt_write("OK stop\n");
+            continue;
+        }
+        bool positive = strcmp(command, "drive+") == 0;
+        if (!positive && strcmp(command, "drive-") != 0) { continue; }
+        if (key != USER_SWITCH_NONE || !neutral_seen || !mode_active || fault || any_stop_pending() ||
+            motion != MOTOR_DEBUG_OFF || !motion_ready(MOTOR_DEBUG_DRIVE, now, true)) {
+            board_debug_rtt_write("REJECT drive\n");
+            continue;
+        }
+        begin_motion(MOTOR_DEBUG_DRIVE, positive ? USER_SWITCH_FORWARD : USER_SWITCH_BACK, now);
+        rtt_drive = true;
+        neutral_seen = false;
+        board_debug_rtt_write("OK drive\n");
+    }
 }
 
 void app_motor_debug_process(void)
@@ -312,28 +443,26 @@ void app_motor_debug_process(void)
     }
     if (fault && !fault_handled) { fault_handled = true; begin_stop(now); }
 
-    bool select_high = true;
-    bool select_valid = board_gpio_read_input(BOARD_GPIO_INPUT_SW_1, &select_high);
-    bool select = !select_high;
-    user_switch_t key = select_valid ? user_switch_read() : USER_SWITCH_INVALID;
-    if (key != raw_key || select != raw_select) { raw_key = key; raw_select = select; input_at = now; }
+    user_switch_t key = user_switch_read();
+    if (key != raw_key) { raw_key = key; input_at = now; }
 
     if (motion != MOTOR_DEBUG_OFF) {
         bool init_finished = motion == MOTOR_DEBUG_INIT &&
             (init_waiting == 0U || !fresh(now, motion_at, INITIALIZE_TIMEOUT_MS));
-        if (expired || interrupted || select || key != running_key || init_finished ||
+        bool released = rtt_drive ? key != USER_SWITCH_NONE || !fresh(now, motion_at, RTT_DRIVE_MS) :
+            key != running_key && (motion != MOTOR_DEBUG_INIT || key != USER_SWITCH_NONE);
+        if (expired || interrupted || released || init_finished ||
             !motion_ready(motion, now, false)) { begin_stop(now); }
     }
     send_stops(now);
+    rtt_process(now, key);
     if (!mode_active || fault || any_stop_pending()) { return; }
 
+    if (motion == MOTOR_DEBUG_OFF) { read_ranges(now); }
     if (motion == MOTOR_DEBUG_OFF && !fresh(now, input_at, DEBOUNCE_MS)) {
-        if (!select && key == USER_SWITCH_NONE) {
+        if (key == USER_SWITCH_NONE) {
             neutral_seen = true;
-        } else if (select && key == USER_SWITCH_NONE && neutral_seen) {
-            selected = (selected + 1U) % (ALL_WHEELS + 1U);
-            neutral_seen = false;
-        } else if (!select && neutral_seen && key != USER_SWITCH_NONE) {
+        } else if (neutral_seen) {
             motor_debug_state_t action = MOTOR_DEBUG_INIT;
             if (key == USER_SWITCH_LEFT || key == USER_SWITCH_RIGHT) { action = MOTOR_DEBUG_STEER; }
             if (key == USER_SWITCH_FORWARD || key == USER_SWITCH_BACK) { action = MOTOR_DEBUG_DRIVE; }
@@ -350,7 +479,7 @@ void app_motor_debug_process(void)
     if (!sent) { begin_stop(now); send_stops(now); }
 }
 
-motor_debug_status_t app_motor_debug_status(void)
+motor_debug_state_t app_motor_debug_status(void)
 {
     motor_debug_state_t state = motion;
     if (fault) { state = MOTOR_DEBUG_FAULT; }
@@ -358,5 +487,5 @@ motor_debug_status_t app_motor_debug_status(void)
     else if (mode_active && state == MOTOR_DEBUG_OFF) {
         state = neutral_seen ? MOTOR_DEBUG_READY : MOTOR_DEBUG_WAIT;
     }
-    return (motor_debug_status_t){state, selected};
+    return state;
 }

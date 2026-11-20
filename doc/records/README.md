@@ -1,5 +1,6 @@
 # 検証記録
 
+- [2026-11-21 全軸操舵とMain RTT・USB-CAN確認](2026-11/main_rtt_motor_20261121.md)
 - [2026-11-21 5方向ボタンとC610全輪操作](2026-11/motor_buttons_20261121.md)
 - [2026年11月までの開発・検証記録](development_history.md)
 

@@ -5,6 +5,7 @@
 #include "stm32g4xx_hal.h"
 #include "Board/board_can.h"
 #include "Board/board_debug_uart.h"
+#include "Board/board_debug_rtt.h"
 #include "Board/board_user_adc.h"
 #include "Board/board_buzzer.h"
 #include "Board/board_pwm_math.h"
@@ -39,13 +40,27 @@ TIM_HandleTypeDef htim1 = {.Instance=&timer};
 static unsigned int can_free[2], can_sent_count[2], rx_count[2], rx_position[2];
 static uint32_t latest_buffer[2], pending_buffers[2], cancelled_buffers[2];
 static bool fail_can_tx, fail_uart_tx, fail_uart_rx, fail_start;
-static board_can_frame_t sent[2][256], incoming[2][64];
+static board_can_frame_t sent[2][2048], incoming[2][64];
 static FDCAN_RxHeaderTypeDef rx_header_override;
 static bool override_header;
 static uint8_t *uart_rx, *uart_tx;
 static uint16_t uart_tx_length;
 static uint16_t *adc_values;
 static uint32_t apb_divider = 1, pclk2 = 170000000;
+static const char *rtt_input = "";
+static char rtt_output[192];
+
+void board_debug_rtt_init(void) {}
+bool board_debug_rtt_read(uint8_t *value)
+{
+    if (*rtt_input == '\0') { return false; }
+    *value = (uint8_t)*rtt_input++;
+    return true;
+}
+void board_debug_rtt_write(const char *line)
+{
+    (void)snprintf(rtt_output, sizeof(rtt_output), "%s", line);
+}
 uint32_t HAL_GetTick(void) { return mock_tick; }
 void HAL_NVIC_SetPriority(IRQn_Type irq, uint32_t a, uint32_t b) { irq_priorities[irq]=a; (void)b; }
 void HAL_NVIC_EnableIRQ(IRQn_Type irq) { (void)irq; }
@@ -330,7 +345,24 @@ static void inject(unsigned int bus, uint16_t id, const uint8_t data[8])
     memcpy(frame->data, data, 8);
 }
 
-static void motor_ticks(unsigned int ms, uint16_t key_adc, bool c610_can2, uint8_t g2_state)
+static const board_can_frame_t *latest_tx(unsigned int bus, uint16_t id);
+
+static bool inject_range_reply(unsigned int bus)
+{
+    static unsigned int last_sequence[2];
+    const uint16_t id = bus == 0U ? 0x5E0U : 0x5D0U;
+    const board_can_frame_t *request = latest_tx(bus, id);
+    if (!request || request->data[3] == last_sequence[bus]) { return false; }
+    last_sequence[bus] = request->data[3];
+    uint8_t data[8] = {0xD4, 0x8A, request->data[2], request->data[3]};
+    const int32_t edge = (bus == 0U && (data[2] & 1U) == 0U) ? 40000 : 60000;
+    int32_t value = request->data[4] == 7U ? -edge : request->data[4] == 8U ? edge : 0;
+    for (unsigned int i = 0; i < 4U; ++i) { data[4U + i] = (uint8_t)((uint32_t)value >> (8U * i)); }
+    inject(bus, id + 1U, data);
+    return true;
+}
+
+static void motor_ticks(unsigned int ms, uint16_t key_adc, bool c610_can2, uint8_t calibration_state)
 {
     while (ms-- != 0U) {
         mock_tick++;
@@ -342,17 +374,21 @@ static void motor_ticks(unsigned int ms, uint16_t key_adc, bool c610_can2, uint8
             const uint16_t first = (uint16_t)(2U * bus);
             if (mock_tick % 10U == 0U) {
                 uint8_t cal[8] = {0,0,1,3,0,0,1,3};
-                if (bus == 1 && g2_state == 2U) {
+                if (calibration_state == 2U) {
                     cal[1] = 0x80;
                     cal[2] = 0;
                     cal[3] = 2;
+                    cal[5] = 0x80;
+                    cal[6] = 0;
+                    cal[7] = 2;
                 }
                 inject(bus, (uint16_t)(0x510U + first), cal);
             } else {
                 inject(bus, (uint16_t)(0x230U + first), zeros);
+                bool has_reply = inject_range_reply(bus);
                 if (bus == 0 || c610_can2) {
                     inject(bus, (uint16_t)(0x201U + first), zeros);
-                    inject(bus, (uint16_t)(0x202U + first), zeros);
+                    if (!has_reply) { inject(bus, (uint16_t)(0x202U + first), zeros); }
                 }
             }
         }
@@ -398,6 +434,15 @@ static void assert_all_drive(int direction)
     }
 }
 
+static int16_t angle_mrad(unsigned int bus, unsigned int axis)
+{
+    const board_can_frame_t *angle = latest_tx(bus, (uint16_t)(0x120U + 2U * bus));
+    assert(angle && angle->length == 8);
+    const uint8_t *field = &angle->data[4U * axis];
+    assert(field[2] == 50U && field[3] == 40U);
+    return (int16_t)((uint16_t)field[0] | (uint16_t)field[1] << 8);
+}
+
 static void test_motor_debug(void)
 {
     assert(app_init());
@@ -405,89 +450,90 @@ static void test_motor_debug(void)
     assert(can_sent_count[0] == 0 && can_sent_count[1] == 0);
     mock_gpio_low = 3;
     motor_ticks(80, 501, true, 3);
-    assert(app_motor_debug_status().state == MOTOR_DEBUG_WAIT);
+    assert(app_motor_debug_status() == MOTOR_DEBUG_WAIT);
     assert(latest_tx(0, 0x120) == NULL);
     assert_stop(0); assert_stop(1);
     orion_can_sample_t sample;
     assert(!orion_can_read(BOARD_CAN_1, 0x230, mock_tick, 50, &sample));
 
     motor_ticks(35, 4095, true, 3);
-    assert(app_motor_debug_status().state == MOTOR_DEBUG_READY);
-    motor_ticks(37, 501, true, 3);
-    assert(app_motor_debug_status().state == MOTOR_DEBUG_STEER);
-    const board_can_frame_t *angle = latest_tx(0, 0x120);
-    const board_can_frame_t *control = latest_tx(0, 0x350);
-    const uint8_t target_right[8] = {6,1,50,40,0,0,0,0};
-    assert(angle && angle->length == 8 && memcmp(angle->data, target_right, 8) == 0);
-    assert(control && control->length == 2 && control->data[0] == 1 && control->data[1] == 0);
-    assert(latest_tx(1, 0x122) == NULL);
+    assert(app_motor_debug_status() == MOTOR_DEBUG_READY);
+    motor_ticks(131, 501, true, 3);
+    assert(app_motor_debug_status() == MOTOR_DEBUG_STEER);
+    assert(angle_mrad(0, 0) == 157 && angle_mrad(1, 1) == 157);
+    motor_ticks(300, 501, true, 3);
+    assert(angle_mrad(0, 0) == 174 && angle_mrad(0, 1) == 523);
+    assert(angle_mrad(1, 0) == 523 && angle_mrad(1, 1) == 523);
     pending_buffers[0] = latest_buffer[0];
     motor_ticks(1, 4095, true, 3);
     assert(cancelled_buffers[0] != 0);
     assert_stop(0); assert_stop(1);
 
-    /* 操舵対象外の輪も校正・帰還がそろうまで全輪駆動を開始しない。 */
+    /* 全輪の校正・帰還がそろうまで駆動を開始しない。 */
     motor_ticks(35, 4095, true, 2);
     motor_ticks(45, 2400, true, 2);
-    assert(app_motor_debug_status().state == MOTOR_DEBUG_WAIT);
+    assert(app_motor_debug_status() == MOTOR_DEBUG_WAIT);
     assert_stop(0); assert_stop(1);
 
-    for (unsigned int i = 0; i < 2; ++i) {
-        motor_ticks(35, 4095, true, 3);
-        mock_gpio_low |= 1UL << BOARD_GPIO_INPUT_SW_1;
-        motor_ticks(60, 4095, true, 3);
-        mock_gpio_low = 3;
-    }
+    motor_ticks(60, 4095, false, 3);
+    rtt_input = "drive+\n";
+    motor_ticks(1, 4095, false, 3);
+    assert(strcmp(rtt_output, "REJECT drive\n") == 0);
+    assert_stop(0); assert_stop(1);
+
+    motor_ticks(4, 4095, true, 3);
+    rtt_input = "drive+\n";
+    motor_ticks(22, 4095, true, 3);
+    assert(strcmp(rtt_output, "OK drive\n") == 0);
+    assert_all_drive(1);
+    motor_ticks(2200, 4095, true, 3);
+    assert_stop(0); assert_stop(1);
+
     motor_ticks(35, 4095, true, 3);
-    assert(app_motor_debug_status().wheel == 2);
     motor_ticks(75, 110, true, 3);
-    assert(app_motor_debug_status().state == MOTOR_DEBUG_DRIVE);
+    assert(app_motor_debug_status() == MOTOR_DEBUG_DRIVE);
     assert_all_drive(-1);
     motor_ticks(80, 110, false, 3);
     assert_stop(0); assert_stop(1);
     motor_ticks(60, 110, true, 3);
-    assert(app_motor_debug_status().state == MOTOR_DEBUG_WAIT);
+    assert(app_motor_debug_status() == MOTOR_DEBUG_WAIT);
     assert_stop(1);
 
     motor_ticks(35, 4095, true, 3);
     motor_ticks(32, 50, true, 3);
-    control = latest_tx(1, 0x352);
-    assert(app_motor_debug_status().state == MOTOR_DEBUG_INIT && control->data[0] == 3 && control->data[1] == 0);
-    motor_ticks(10, 50, true, 2);
-    motor_ticks(35, 50, true, 3);
+    assert(app_motor_debug_status() == MOTOR_DEBUG_INIT);
+    for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
+        const board_can_frame_t *control = latest_tx(bus, (uint16_t)(0x350U + 2U * bus));
+        assert(control && control->length == 2 && control->data[0] == 3 && control->data[1] == 3);
+    }
+    motor_ticks(10, 4095, true, 2);
+    assert(app_motor_debug_status() == MOTOR_DEBUG_INIT);
+    motor_ticks(35, 4095, true, 3);
     assert_stop(1);
 
     motor_ticks(35, 4095, true, 3);
-    assert(app_motor_debug_status().wheel == 2);
     motor_ticks(46, 2400, true, 3);
-    assert(app_motor_debug_status().state == MOTOR_DEBUG_DRIVE);
+    assert(app_motor_debug_status() == MOTOR_DEBUG_DRIVE);
     assert_all_drive(1);
     mock_gpio_low = 0;
     motor_ticks(35, 2400, true, 3);
-    assert(app_motor_debug_status().state == MOTOR_DEBUG_OFF);
+    assert(app_motor_debug_status() == MOTOR_DEBUG_OFF);
     assert_stop(0); assert_stop(1);
     mock_gpio_low = 3;
     motor_ticks(80, 2400, true, 3);
-    assert(app_motor_debug_status().state == MOTOR_DEBUG_WAIT);
+    assert(app_motor_debug_status() == MOTOR_DEBUG_WAIT);
     assert_stop(0); assert_stop(1);
 
-    for (unsigned int i = 0; i < 2; ++i) {
-        motor_ticks(35, 4095, true, 3);
-        mock_gpio_low |= 1UL << BOARD_GPIO_INPUT_SW_1;
-        motor_ticks(32, 4095, true, 3);
-        mock_gpio_low = 3;
-    }
     motor_ticks(35, 4095, true, 3);
-    assert(app_motor_debug_status().wheel == 4);
-    motor_ticks(37, 3001, true, 3);
-    angle = latest_tx(1, 0x122);
-    const uint8_t target_left[8] = {0xFA,0xFE,50,40,0xFA,0xFE,50,40};
-    assert(angle && memcmp(angle->data, target_left, 8) == 0);
+    motor_ticks(131, 3001, true, 3);
+    assert(angle_mrad(0, 0) == -157 && angle_mrad(1, 1) == -157);
+    motor_ticks(300, 3001, true, 3);
+    assert(angle_mrad(0, 0) == -174 && angle_mrad(1, 1) == -523);
     const uint8_t error[8] = {2,0,1};
     inject(1, 0x000, error);
     can_free[0] = can_free[1] = 3;
     app_process();
-    assert(app_motor_debug_status().state == MOTOR_DEBUG_FAULT);
+    assert(app_motor_debug_status() == MOTOR_DEBUG_FAULT);
     assert_stop(0); assert_stop(1);
     assert(latest_tx(0, 0x000) == NULL && latest_tx(1, 0x000) == NULL);
 }

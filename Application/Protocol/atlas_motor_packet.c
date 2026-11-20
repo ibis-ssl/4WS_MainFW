@@ -53,6 +53,27 @@ bool c610_decode_feedback(const uint8_t data[8], c610_feedback_t *feedback)
     return true;
 }
 
+void atlas_encode_axis_read(uint8_t data[8], uint8_t axis, uint8_t sequence, uint8_t field)
+{
+    /* CAN保守RPCのAXIS読取り。固定タグはMainの要求と応答の照合にのみ使う。 */
+    data[0] = 0xD4;
+    data[1] = 10;
+    data[2] = 0xFCU | axis;
+    data[3] = sequence;
+    data[4] = field;
+    data[5] = data[6] = data[7] = 0;
+}
+
+bool atlas_decode_axis_read(const uint8_t data[8], uint8_t axis, uint8_t sequence, int32_t *value)
+{
+    if (data[0] != 0xD4U || data[1] != 0x8AU || data[2] != (0xFCU | axis) || data[3] != sequence) {
+        return false;
+    }
+    *value = (int32_t)((uint32_t)data[4] | (uint32_t)data[5] << 8 |
+        (uint32_t)data[6] << 16 | (uint32_t)data[7] << 24);
+    return true;
+}
+
 void c610_encode_current(uint8_t data[8], unsigned int slot, int16_t ma)
 {
     uint16_t current = (uint16_t)ma;
