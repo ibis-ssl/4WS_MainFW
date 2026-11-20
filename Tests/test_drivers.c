@@ -13,6 +13,7 @@
 #include "Device/user_switch.h"
 #include "Device/power_board.h"
 #include "App/app.h"
+#include "App/app_board_reset.h"
 #include "App/app_control.h"
 #include "App/app_motor_debug.h"
 #include "Board/board_gpio.h"
@@ -346,6 +347,21 @@ static void inject(unsigned int bus, uint16_t id, const uint8_t data[8])
 }
 
 static const board_can_frame_t *latest_tx(unsigned int bus, uint16_t id);
+static bool skip_first_reset_ack, use_second_bus_alternate_offset;
+
+static bool inject_startup_reply(unsigned int bus)
+{
+    static unsigned int last_sequence[2];
+    const uint16_t id = bus == 0U || use_second_bus_alternate_offset ? 0x5E0U : 0x5D0U;
+    const board_can_frame_t *request = latest_tx(bus, id);
+    if (!request || request->data[2] != 0xF6U || request->data[3] == last_sequence[bus]) { return false; }
+    last_sequence[bus] = request->data[3];
+    if (skip_first_reset_ack && bus == 0U && request->data[1] == 31U) { return false; }
+    uint8_t data[8] = {0xD4U, request->data[1] | 0x80U, request->data[2], request->data[3]};
+    if (request->data[1] == 11U && request->data[4] == 20U) { data[4] = (uint8_t)bus; }
+    inject(bus, id + 1U, data);
+    return true;
+}
 
 static bool inject_range_reply(unsigned int bus)
 {
@@ -385,7 +401,7 @@ static void motor_ticks(unsigned int ms, uint16_t key_adc, bool c610_can2, uint8
                 inject(bus, (uint16_t)(0x510U + first), cal);
             } else {
                 inject(bus, (uint16_t)(0x230U + first), zeros);
-                bool has_reply = inject_range_reply(bus);
+                bool has_reply = inject_startup_reply(bus) || inject_range_reply(bus);
                 if (bus == 0 || c610_can2) {
                     inject(bus, (uint16_t)(0x201U + first), zeros);
                     if (!has_reply) { inject(bus, (uint16_t)(0x202U + first), zeros); }
@@ -439,15 +455,58 @@ static int16_t angle_mrad(unsigned int bus, unsigned int axis)
     const board_can_frame_t *angle = latest_tx(bus, (uint16_t)(0x120U + 2U * bus));
     assert(angle && angle->length == 8);
     const uint8_t *field = &angle->data[4U * axis];
-    assert(field[2] == 50U && field[3] == 40U);
+    assert(field[2] == 150U && field[3] == 40U);
     return (int16_t)((uint16_t)field[0] | (uint16_t)field[1] << 8);
+}
+
+static unsigned int count_reset_tx(unsigned int bus, uint16_t id)
+{
+    unsigned int resets = 0;
+    for (unsigned int n = 0; n < can_sent_count[bus]; ++n) {
+        const board_can_frame_t *frame = &sent[bus][n];
+        if (frame->id == id && frame->data[1] == 31U) { resets++; }
+    }
+    return resets;
+}
+
+static void test_startup_reset_failure(void)
+{
+    skip_first_reset_ack = use_second_bus_alternate_offset = true;
+    assert(app_init());
+    mock_gpio_low = 3;
+    motor_ticks(50, 4095, true, 3);
+    const uint8_t pre_reset_error[8] = {1, 0, 4};
+    inject(0, 0x000U, pre_reset_error);
+    can_free[0] = can_free[1] = 3;
+    app_process();
+    rtt_input = "init\n";
+    motor_ticks(1, 4095, true, 3);
+    assert(strcmp(rtt_output, "REJECT init\n") == 0);
+    motor_ticks(1000, 4095, true, 3);
+    assert(count_reset_tx(0, 0x5E0U) == 1U);
+    assert(count_reset_tx(1, 0x5D0U) == 0U);
+    assert(count_reset_tx(1, 0x5E0U) == 1U);
+    assert(app_board_reset_status() == BOARD_RESET_FAILED);
+    assert(app_motor_debug_status() == MOTOR_DEBUG_FAULT);
+    assert_stop(0); assert_stop(1);
 }
 
 static void test_motor_debug(void)
 {
     assert(app_init());
-    motor_ticks(40, 501, true, 3);
-    assert(can_sent_count[0] == 0 && can_sent_count[1] == 0);
+    motor_ticks(50, 501, true, 3);
+    const uint8_t pre_reset_error[8] = {1, 0, 4};
+    inject(0, 0x000U, pre_reset_error);
+    app_process();
+    motor_ticks(650, 501, true, 3);
+    assert(app_board_reset_status() == BOARD_RESET_READY);
+    assert_stop(0); assert_stop(1);
+    const board_can_frame_t *power_reset = latest_tx(0, 0x001);
+    const uint8_t reset[8] = {0x5A, 0xA5};
+    assert(power_reset && power_reset->length == 8 && memcmp(power_reset->data, reset, 8) == 0);
+    assert(latest_tx(1, 0x001) == NULL);
+    assert(count_reset_tx(0, 0x5E0U) == 1U);
+    assert(count_reset_tx(1, 0x5D0U) == 1U);
     mock_gpio_low = 3;
     motor_ticks(80, 501, true, 3);
     assert(app_motor_debug_status() == MOTOR_DEBUG_WAIT);
@@ -559,6 +618,7 @@ int main(int argc, char **argv)
     if (argc>1 && strcmp(argv[1],"peripherals")==0) { test_peripherals(); return 0; }
     if (argc>1 && strcmp(argv[1],"app")==0) { test_app_periodic(); puts("PASS: 500 Hz ISR and 10 Hz main logging"); return 0; }
     if (argc>1 && strcmp(argv[1],"motor")==0) { test_motor_debug(); puts("PASS: Atlas/C610 motor debug, bus routing and stops"); return 0; }
+    if (argc>1 && strcmp(argv[1],"boot")==0) { test_startup_reset_failure(); puts("PASS: startup reset timeout, offset fallback and interlock"); return 0; }
     test_can(); test_uart(); test_adc_switch(); test_buzzer(); test_power();
     test_control_timer();
     assert(mock_primask==0); puts("PASS: CAN/UART/ADC/SW/PWM/power driver tests"); return 0;

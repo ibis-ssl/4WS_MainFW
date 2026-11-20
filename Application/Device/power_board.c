@@ -18,7 +18,9 @@ uint8_t power_board_set_param(power_param_t param, float value)
 }
 uint8_t power_board_request_reset(void)
 {
-    uint8_t data[8]; power_packet_reset(data); return send_power(0x001, data);
+    uint8_t data[8];
+    power_packet_reset(data);
+    return board_can_send_immediate(BOARD_CAN_1, 0x001U, data, 8) ? 1U : 0U;
 }
 bool power_board_accept(board_can_bus_t bus, const board_can_frame_t *frame)
 {

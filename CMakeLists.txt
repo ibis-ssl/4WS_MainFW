@@ -46,6 +46,7 @@ target_link_directories(${CMAKE_PROJECT_NAME} PRIVATE
 target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     # ユーザーコードはCubeMX生成先から分離し、対象ファイルを明示する。
     Application/App/app.c
+    Application/App/app_board_reset.c
     Application/App/app_monitor.c
     Application/App/app_motor_debug.c
     Application/App/app_control.c

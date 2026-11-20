@@ -77,7 +77,7 @@ AtlasのMain―周辺基板間の具体的なID・payload・周期・予約は[C
 
 `main()`はHALとクロックを初期化し、GPIO、ADC1、FDCAN1/2、I2C1、LPUART1、UART4、SPI1/2、TIM1/2/3、CORDICの初期化関数を呼び出します。その後、USER CODEから`app_init()`を呼び、`while (1)`で`app_process()`を繰り返します。
 
-AppはUART4デバッグ、ADCユーザーSW、両Classic CAN、IMU取得の状態管理、OLED検出を開始し、制御IRQ開始後に起動ブザーを2 kHz・100 ms鳴らします。メイン処理でCAN受信の振り分け、モーターデバッグ、IMU取得、OLED表示、UART入力・状態表示、ブザー時間管理を行います。通常制御用のTIM6 IRQ入口は500 Hz、UART状態表示はmainのp()で10 Hzです。電源指令は明示要求時だけ送信するAPIを提供します。[基礎ドライバ](drivers.md) · [CAN・IMU・OLED](peripherals.md)
+AppはUART4デバッグ、ADCユーザーSW、両Classic CAN、IMU取得の状態管理、OLED検出を開始し、制御IRQ開始後に起動ブザーを2 kHz・100 ms鳴らします。メイン処理で起動時の周辺基板リセット、CAN受信の振り分け、モーターデバッグ、IMU取得、OLED表示、UART入力・状態表示、ブザー時間管理を行います。通常制御用のTIM6 IRQ入口は500 Hz、UART状態表示はmainのp()で10 Hzです。[起動時の周辺基板リセット](atlas_bringup.md#起動時の周辺基板リセット) · [基礎ドライバ](drivers.md)
 
 `Application/Board/board_gpio.c`には、名前付きデジタル入力の生レベル取得とLED端子のレベル設定を実装しています。LEDはHigh点灯の指定に従い、Appの起動シーケンスから使用します。[コード階層](architecture.md)に各層の責務、依存方向、旧世代の実装から整理する方針を定義しています。
 

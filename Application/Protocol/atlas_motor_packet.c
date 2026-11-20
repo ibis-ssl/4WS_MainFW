@@ -40,8 +40,8 @@ void atlas_encode_angle(uint8_t data[8], unsigned int axis, int16_t mrad)
     uint16_t angle = (uint16_t)mrad;
     field[0] = (uint8_t)angle;
     field[1] = (uint8_t)(angle >> 8);
-    /* 上限はデバッグ用の 0.5 A / 20%。保存上限と可動域の照合はステアFWが行う。 */
-    field[2] = 50;
+    /* 角度制御の上限は1.5 A / 20%。保存上限と可動域の照合はステアFWが行う。 */
+    field[2] = 150;
     field[3] = 40;
 }
 
@@ -53,24 +53,37 @@ bool c610_decode_feedback(const uint8_t data[8], c610_feedback_t *feedback)
     return true;
 }
 
-void atlas_encode_axis_read(uint8_t data[8], uint8_t axis, uint8_t sequence, uint8_t field)
+void atlas_encode_rpc(uint8_t data[8], uint8_t opcode, uint8_t tag, uint8_t sequence, uint8_t field)
 {
-    /* CAN保守RPCのAXIS読取り。固定タグはMainの要求と応答の照合にのみ使う。 */
     data[0] = 0xD4;
-    data[1] = 10;
-    data[2] = 0xFCU | axis;
+    data[1] = opcode;
+    data[2] = tag;
     data[3] = sequence;
     data[4] = field;
     data[5] = data[6] = data[7] = 0;
 }
 
-bool atlas_decode_axis_read(const uint8_t data[8], uint8_t axis, uint8_t sequence, int32_t *value)
+bool atlas_decode_rpc(const uint8_t data[8], uint8_t opcode, uint8_t tag, uint8_t sequence, uint32_t *value)
 {
-    if (data[0] != 0xD4U || data[1] != 0x8AU || data[2] != (0xFCU | axis) || data[3] != sequence) {
+    if (data[0] != 0xD4U || data[1] != (opcode | 0x80U) || data[2] != tag || data[3] != sequence) {
         return false;
     }
-    *value = (int32_t)((uint32_t)data[4] | (uint32_t)data[5] << 8 |
-        (uint32_t)data[6] << 16 | (uint32_t)data[7] << 24);
+    *value = (uint32_t)data[4] | (uint32_t)data[5] << 8 |
+        (uint32_t)data[6] << 16 | (uint32_t)data[7] << 24;
+    return true;
+}
+
+void atlas_encode_axis_read(uint8_t data[8], uint8_t axis, uint8_t sequence, uint8_t field)
+{
+    /* AXIS読取りは起動時リセットと異なるタグで照合する。 */
+    atlas_encode_rpc(data, 10, 0xFCU | axis, sequence, field);
+}
+
+bool atlas_decode_axis_read(const uint8_t data[8], uint8_t axis, uint8_t sequence, int32_t *value)
+{
+    uint32_t raw;
+    if (!atlas_decode_rpc(data, 10, 0xFCU | axis, sequence, &raw)) { return false; }
+    *value = (int32_t)raw;
     return true;
 }
 

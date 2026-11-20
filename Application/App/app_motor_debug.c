@@ -1,4 +1,5 @@
 #include "App/app_motor_debug.h"
+#include "App/app_board_reset.h"
 #include "Board/board_gpio.h"
 #include "Board/board_debug_rtt.h"
 #include "Board/board_time.h"
@@ -381,11 +382,12 @@ static void rtt_status(uint32_t now)
     }
     char line[192];
     int length = snprintf(line, sizeof(line),
-        "MAIN ms=%lu mode=%u state=%u cal=%X esc=%X range=%X target=%d rpm=%d,%d,%d,%d ma=%d,%d,%d,%d\n",
+        "MAIN ms=%lu mode=%u state=%u cal=%X esc=%X range=%X target=%d rpm=%d,%d,%d,%d ma=%d,%d,%d,%d boot=%u\n",
         (unsigned long)now, (unsigned int)mode_active, (unsigned int)app_motor_debug_status(), cal, esc, ranges,
         motion == MOTOR_DEBUG_DRIVE ? (int)lroundf(ramped_rpm) : 0,
         wheels[0].feedback.rpm, wheels[1].feedback.rpm, wheels[2].feedback.rpm, wheels[3].feedback.rpm,
-        wheels[0].command_ma, wheels[1].command_ma, wheels[2].command_ma, wheels[3].command_ma);
+        wheels[0].command_ma, wheels[1].command_ma, wheels[2].command_ma, wheels[3].command_ma,
+        (unsigned int)app_board_reset_status());
     if (length > 0 && (size_t)length < sizeof(line)) { board_debug_rtt_write(line); }
 }
 
@@ -449,6 +451,10 @@ static bool motion_released(user_switch_t key, uint32_t now)
 void app_motor_debug_process(void)
 {
     uint32_t now = board_millis();
+    if (app_board_reset_status() != BOARD_RESET_READY) {
+        rtt_process(now, USER_SWITCH_INVALID);
+        return;
+    }
     bool expired = !fresh(now, last_process, LOOP_TIMEOUT_MS);
     last_process = now;
     bool mode = motor_mode_selected();
@@ -501,6 +507,8 @@ void app_motor_debug_process(void)
 
 motor_debug_state_t app_motor_debug_status(void)
 {
+    if (app_board_reset_status() == BOARD_RESET_FAILED) { return MOTOR_DEBUG_FAULT; }
+    if (app_board_reset_status() == BOARD_RESET_PENDING) { return MOTOR_DEBUG_WAIT; }
     motor_debug_state_t state = motion;
     if (fault) { state = MOTOR_DEBUG_FAULT; }
     else if (any_stop_pending()) { state = MOTOR_DEBUG_STOP; }

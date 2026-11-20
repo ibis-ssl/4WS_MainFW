@@ -26,6 +26,8 @@ typedef struct {
 void atlas_decode_feedback(const uint8_t data[8], atlas_axis_feedback_t axes[2]);
 bool atlas_decode_calibration(const uint8_t data[8], atlas_axis_calibration_t axes[2]);
 void atlas_encode_angle(uint8_t data[8], unsigned int axis, int16_t mrad);
+void atlas_encode_rpc(uint8_t data[8], uint8_t opcode, uint8_t tag, uint8_t sequence, uint8_t field);
+bool atlas_decode_rpc(const uint8_t data[8], uint8_t opcode, uint8_t tag, uint8_t sequence, uint32_t *value);
 void atlas_encode_axis_read(uint8_t data[8], uint8_t axis, uint8_t sequence, uint8_t field);
 bool atlas_decode_axis_read(const uint8_t data[8], uint8_t axis, uint8_t sequence, int32_t *value);
 bool c610_decode_feedback(const uint8_t data[8], c610_feedback_t *feedback);
