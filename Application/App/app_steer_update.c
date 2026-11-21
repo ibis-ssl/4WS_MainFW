@@ -12,7 +12,8 @@ enum {
     U_BEGIN = 0x10, U_BLOCK = 0x11, U_WRITE = 0x12, U_FINISH = 0x13, U_REBOOT = 0x14, U_DATA = 0x20,
     RPC_BOARD = 11, BOARD_ID = 20, RPC_TAG = 0xF4,
     FAIL_TIMEOUT = 1, FAIL_TARGET, FAIL_VERIFY, FAIL_IMAGE,
-    STAGING_TIMEOUT = 5000, BOOT_WAIT = 300, REQUEST_TIMEOUT = 250, MAX_ATTEMPTS = 4
+    STAGING_TIMEOUT = 5000, BOOT_WAIT = 300, REQUEST_TIMEOUT = 250, MAX_ATTEMPTS = 4,
+    BLOCK_MAX_ATTEMPTS = 24
 };
 
 typedef enum {
@@ -264,11 +265,16 @@ void app_steer_update_process(uint32_t now)
     }
     if (step == FIND_NEW_APP && attempts == 0U && now - request_at < BOOT_WAIT) { return; }
     if (awaiting) {
+        /* ブートの応答は低優先度で自動再送されない。ブロックの再送間隔を変えて
+         * 周期的な帰還フレームとの競合を避ける。これらの操作は再送しても再書込みしない。 */
+        bool block_transfer = step == OPEN_BLOCK || step == SEND_DATA || step == COMMIT_BLOCK;
         uint32_t timeout = step == BEGIN_FLASH ? 3000U :
             (step == ENTER_BOOT || step == FINISH_FLASH) ? 800U : REQUEST_TIMEOUT;
+        if (block_transfer) { timeout = 35U + (attempts * 7U) % 29U; }
         if (now - request_at < timeout) { return; }
         if (step == REBOOT_APP) { advance(FIND_NEW_APP); return; }
-        if (attempts >= MAX_ATTEMPTS || step == BEGIN_FLASH) { fail(FAIL_TIMEOUT); return; }
+        if (attempts >= (block_transfer ? BLOCK_MAX_ATTEMPTS : MAX_ATTEMPTS) ||
+            step == BEGIN_FLASH) { fail(FAIL_TIMEOUT); return; }
         if (step == FIND_APP) { offset ^= 16U; }
         awaiting = false;
     }

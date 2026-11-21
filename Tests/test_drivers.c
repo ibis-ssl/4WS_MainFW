@@ -672,6 +672,7 @@ static void test_steer_update(void)
     assert(strcmp(rtt_output, "OK fw\n") == 0);
     assert(app_steer_update_locked() && !app_steer_update_abort());
     unsigned int received = 0, frame_index = 0, blocks = 0;
+    unsigned int lost_open_replies = 5U;
     bool erased = false, finished = false, rebooted = false;
     for (unsigned int t = 0; t < 1200U && app_steer_update_locked(); ++t) {
         mock_tick++;
@@ -703,7 +704,13 @@ static void test_steer_update(void)
                 case 4: value = finished ? expected_crc : 0x11223344U; break;
                 case 5: value = 0x34444344U; break;
                 case 0x10: erased = true; break;
-                case 0x11: frame_index = 0; break;
+                case 0x11:
+                    frame_index = 0;
+                    if (blocks == 1U && lost_open_replies != 0U) {
+                        lost_open_replies--;
+                        continue;
+                    }
+                    break;
                 case 0x12:
                     assert(frame_index == 43U);
                     blocks++;
@@ -724,6 +731,7 @@ static void test_steer_update(void)
     steer_update_status_t update = app_steer_update_status();
     assert(update.state == STEER_UPDATE_DONE && update.written == sizeof(image_bytes));
     assert(update.old_crc == 0x11223344U && update.image_crc == expected_crc && rebooted);
+    assert(lost_open_replies == 0U);
     assert(!app_steer_update_locked() && latest_tx(0, 0x600U) == NULL);
 }
 

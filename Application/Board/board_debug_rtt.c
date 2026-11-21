@@ -18,7 +18,8 @@ typedef struct {
 } rtt_control_t;
 
 static uint8_t up[1024], down[1024];
-static volatile rtt_control_t main_rtt;
+/* 転送中の他基板FWにもRTT署名があり得るため、探索の開始側に制御ブロックを置く。 */
+static volatile rtt_control_t main_rtt __attribute__((section(".data.main_rtt"))) = {0};
 
 void board_debug_rtt_init(void)
 {

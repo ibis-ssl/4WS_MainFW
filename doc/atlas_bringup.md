@@ -71,6 +71,8 @@ openocd -c 'set MAIN_STLINK_SERIAL STLINK_SERIAL' -f ./Script/openocd_main_rtt.c
 
 `STLINK_SERIAL` を対象の番号へ置き換える。OpenOCDはCPUを止めずにRTTチャネル0を `127.0.0.1:19030` へ公開する。TCPで改行付きの `status` を送ると、RPMと指令電流、および `cal`（操舵校正）、`esc`（C610帰還）、`range`（操舵範囲）の4輪ビットマスクが返る。各マスクはbit 0～3がg0～g3に対応する。`boot` は周辺基板リセットの状態で、0が処理中、1が確認完了、2が失敗。
 
+以前のFWで転送後にOpenOCDがステアBIN内の `SEGGER RTT` を拾う場合は、搭載中のMainと同じELFの `main_rtt` を `arm-none-eabi-nm -S` で調べる。表示された16進アドレスに `0x` を付け、OpenOCDの `-f` の前に `-c 'set MAIN_RTT_ADDRESS 0x2001a098'` の形式で渡す。例のアドレスは搭載FWによって異なる。
+
 全4輪を浮かせ、他の駆動指令元を停止し、モーターデバッグに入ってボタンを離した状態で試験する。RTTの `init` は全軸の校正要求を開始する。校正中はホストが `keep` を送り、500 ms途絶するとMainが停止する。校正時間の上限は30秒。
 
 速度試験は `cal=F esc=F` と4輪の停止を確認して `drive+` または `drive-` を1回送る。駆動は最大2.2秒、目標は±300ローターrpm、指令上限は各輪0.5 A。`stop`、ボタン押下、モード離脱、帰還断でも停止する。
