@@ -18,7 +18,7 @@ CANはVIO修正後の2026-10-09に両バスの実機受信とOrion形式の解�
 
 通常モードの機体制御用入口はTIM6割り込みから500 Hz（2 ms）で呼びます。モーターデバッグの周期処理とUART4の10 Hz状態表示はメインループで実行します。UART4は空白で列幅を揃え、各ページの周期表示を200 byte以内の1行に収めます。`3` の `KICKER` ページでCAN1電源基板の電圧、電流、温度、出力状態、最新Faultを確認できます。
 
-ユーザーコードは`Application/`に配置します。実装仕様とAPIは[基礎ドライバ](doc/drivers.md)、追加機器は[CAN・IMU・OLED](doc/peripherals.md)、配置方針は[コード階層](doc/architecture.md)を参照してください。Main起動時は電源基板とステア2基板へ再起動を要求し、C610へ0 Aを送ります。起動ブザーは2 kHzで100 ms鳴らします。[起動時の周辺基板リセット](doc/atlas_bringup.md#起動時の周辺基板リセット) · [検証記録](doc/records/README.md)
+ユーザーコードは`Application/`に配置します。実装仕様とAPIは[基礎ドライバ](doc/drivers.md)、追加機器は[CAN・IMU・OLED](doc/peripherals.md)、配置方針は[コード階層](doc/architecture.md)を参照してください。Main起動時は電源基板とステア2基板へ再起動を要求し、C610へ0 Aを送ります。電源基板には昇圧・キッカーの充電停止を送り、通常給電はCAN1のPowerOnで維持します。起動ブザーは2 kHzで100 ms鳴らします。[起動時の周辺基板リセット](doc/atlas_bringup.md#起動時の周辺基板リセット) · [検証記録](doc/records/README.md)
 
 BATT_Vは10 kΩ/1 kΩ分圧（電池電圧はADC端子電圧の11倍）です。BATT_V取得とCM4通信処理は未実装で、機器間の通信条件と未決事項は[specsの設計案](specs/proposals/control_modes.md)で管理します。
 

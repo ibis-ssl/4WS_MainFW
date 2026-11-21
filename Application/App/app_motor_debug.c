@@ -454,6 +454,11 @@ bool app_motor_debug_idle(void)
     return motion == MOTOR_DEBUG_OFF && user_switch_read() == USER_SWITCH_NONE;
 }
 
+void app_motor_debug_latch_fault(void)
+{
+    fault = true;
+}
+
 void app_motor_debug_rtt_command(const char *command)
 {
     uint32_t now = board_millis();

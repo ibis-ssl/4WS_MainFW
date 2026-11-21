@@ -14,6 +14,11 @@ typedef struct {
 uint8_t power_board_set_on(bool on);
 uint8_t power_board_set_param(power_param_t param, float value);
 uint8_t power_board_request_reset(void);
+/* 通常給電だけを周期送信する。昇圧・キック動作は許可しない。 */
+void power_board_supply_start(uint32_t now);
+void power_board_supply_process(uint32_t now, bool allowed);
+const char *power_board_supply_status(void);
+bool power_board_supply_fault(void);
 /* CAN1の受信だけを状態に反映する。validは受信済みを表す。 */
 bool power_board_accept(board_can_bus_t bus, const board_can_frame_t *frame);
 bool power_board_get_status(board_can_bus_t bus, power_board_status_t *status);

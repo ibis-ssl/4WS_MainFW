@@ -307,6 +307,48 @@ static void test_power(void)
     assert(sent[0][count-1].id==0x010 && memcmp(sent[0][count-1].data,on,8)==0);
     assert(can_sent_count[1]==other_count);
 }
+
+static void test_power_supply(void)
+{
+    assert(board_can_init());
+    const uint8_t off[8] = {0}, on[8] = {0,1}, standby[8] = {1,0,200};
+    const uint32_t start = UINT32_MAX - 30U;
+    power_board_supply_start(start);
+    can_free[0] = 3;
+    power_board_supply_process(start, false);
+    assert(sent[0][0].id == 0x010U && memcmp(sent[0][0].data, off, 8) == 0);
+    power_board_supply_process(start + 1U, true);
+    assert(sent[0][1].id == 0x110U && memcmp(sent[0][1].data, standby, 8) == 0);
+    power_board_supply_process(start + 20U, true);
+    assert(can_sent_count[0] == 2U);
+    can_free[0] = 0;
+    power_board_supply_process(start + 21U, true);
+    assert(can_sent_count[0] == 2U);
+    can_free[0] = 3;
+    power_board_supply_process(start + 22U, true);
+    assert(sent[0][2].id == 0x010U && memcmp(sent[0][2].data, on, 8) == 0);
+    power_board_supply_process(start + 41U, true);
+    assert(can_sent_count[0] == 3U);
+    power_board_supply_process(start + 42U, true);
+    assert(sent[0][3].id == 0x010U && memcmp(sent[0][3].data, on, 8) == 0);
+    uint32_t power_buffer = latest_buffer[0];
+    assert(board_can_send_immediate(BOARD_CAN_1, 0x350U, off, 2));
+    uint32_t steer_buffer = latest_buffer[0];
+    pending_buffers[0] = power_buffer | steer_buffer;
+    board_can_frame_t flags = {.id=0x244U,.length=8,.data={0x18},.received_ms=start+43U};
+    assert(power_board_accept(BOARD_CAN_1, &flags) && !power_board_supply_fault());
+    flags.data[0] |= 4U;
+    assert(power_board_accept(BOARD_CAN_1, &flags) && power_board_supply_fault());
+    can_free[0] = 3;
+    power_board_supply_process(start + 43U, true);
+    assert(sent[0][5].id == 0x010U && memcmp(sent[0][5].data, off, 8) == 0);
+    assert(cancelled_buffers[0] == power_buffer && pending_buffers[0] == steer_buffer);
+    flags.data[0] = 0;
+    assert(power_board_accept(BOARD_CAN_1, &flags));
+    power_board_supply_process(start + 63U, true);
+    assert(sent[0][6].id == 0x010U && memcmp(sent[0][6].data, off, 8) == 0);
+    assert(strcmp(power_board_supply_status(), "FLT") == 0 && can_sent_count[1] == 0);
+}
 static void test_control_callback(void) { mock_dwt.CYCCNT += 340001U; mock_tim6.SR |= TIM_FLAG_UPDATE; }
 static void test_control_timer(void)
 {
@@ -576,6 +618,7 @@ static void test_motor_debug(void)
     const board_can_frame_t *power_reset = latest_tx(0, 0x001);
     const uint8_t reset[8] = {0x5A, 0xA5};
     assert(power_reset && power_reset->length == 8 && memcmp(power_reset->data, reset, 8) == 0);
+    assert(latest_tx(0, 0x010U)->data[1] == 1U && latest_tx(1, 0x010U) == NULL);
     assert(latest_tx(1, 0x001) == NULL);
     assert(count_reset_tx(0, 0x5E0U) == 1U);
     assert(count_reset_tx(1, 0x5D0U) == 1U);
@@ -680,6 +723,7 @@ static void test_motor_debug(void)
     can_free[0] = can_free[1] = 3;
     app_process();
     assert(app_motor_debug_status() == MOTOR_DEBUG_FAULT);
+    assert(latest_tx(0, 0x010U)->data[1] == 0U);
     assert_stop(0); assert_stop(1);
     assert(latest_tx(0, 0x000) == NULL && latest_tx(1, 0x000) == NULL);
 }
@@ -743,6 +787,7 @@ static void test_steer_update(void)
     assert(strcmp(rtt_output, "OK fw\n") == 0);
     assert(app_steer_update_locked() && !app_steer_update_abort());
     unsigned int received = 0, frame_index = 0, blocks = 0;
+    const unsigned int can1_before = can_sent_count[0];
     unsigned int lost_open_replies = 5U;
     bool erased = false, finished = false, rebooted = false;
     for (unsigned int t = 0; t < 1200U && app_steer_update_locked(); ++t) {
@@ -804,6 +849,14 @@ static void test_steer_update(void)
     assert(update.old_crc == 0x11223344U && update.image_crc == expected_crc && rebooted);
     assert(lost_open_replies == 0U);
     assert(!app_steer_update_locked() && latest_tx(0, 0x600U) == NULL);
+    unsigned int keepalives = 0;
+    for (unsigned int i = can1_before; i < can_sent_count[0]; ++i) {
+        if (sent[0][i].id == 0x010U) {
+            assert(sent[0][i].data[1] == 1U);
+            keepalives++;
+        }
+    }
+    assert(keepalives > 1U);
 }
 
 int main(int argc, char **argv)
@@ -814,6 +867,7 @@ int main(int argc, char **argv)
     if (argc>1 && strcmp(argv[1],"motor")==0) { test_motor_debug(); puts("PASS: Atlas/C610 motor debug, bus routing and stops"); return 0; }
     if (argc>1 && strcmp(argv[1],"boot")==0) { test_startup_reset_failure(); puts("PASS: startup reset timeout, offset fallback and interlock"); return 0; }
     if (argc>1 && strcmp(argv[1],"update")==0) { test_steer_update(); puts("PASS: steering temperatures and RTT-to-CAN firmware update"); return 0; }
+    if (argc>1 && strcmp(argv[1],"power")==0) { test_power_supply(); puts("PASS: power keepalive, HV standby and shutdown"); return 0; }
     test_can(); test_uart(); test_adc_switch(); test_buzzer(); test_power();
     test_control_timer();
     assert(mock_primask==0); puts("PASS: CAN/UART/ADC/SW/PWM/power driver tests"); return 0;

@@ -236,7 +236,8 @@ static void system_page(void)
 
 static void kicker(const power_board_status_t *power, uint32_t now)
 {
-    append("VC="); decimal(power->capacitor_voltage, false, 5, power_marker(power->capacitor_valid, now - power->capacitor_ms));
+    append("PW=%-3s VC=", power_board_supply_status());
+    decimal(power->capacitor_voltage, false, 5, power_marker(power->capacitor_valid, now - power->capacitor_ms));
     append(" IB="); decimal(power->battery_current, true, 6, power_marker(power->current_valid, now - power->current_ms));
     const char *temp = power_marker(power->temperature_valid, now - power->temperature_ms);
     if (temp) { append(" FET=%5s L1=%5s L2=%5s", temp, temp, temp); }

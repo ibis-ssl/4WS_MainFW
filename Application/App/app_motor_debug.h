@@ -18,6 +18,7 @@ typedef struct {
 steer_temperature_t app_motor_debug_temperature(uint32_t now);
 void app_motor_debug_rtt_command(const char *command);
 bool app_motor_debug_idle(void);
+void app_motor_debug_latch_fault(void);
 void app_motor_debug_process(void);
 motor_debug_state_t app_motor_debug_status(void);
 

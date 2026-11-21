@@ -17,6 +17,7 @@ typedef struct {
 bool power_packet_on(bool on, uint8_t data[8]);
 bool power_packet_param(power_param_t param, float value, uint8_t data[8]);
 bool power_packet_reset(uint8_t data[8]);
+void power_packet_stop_charge(uint8_t data[8]);
 /* 電源固有の通知だけを受理する。共通エラーは送信元番号100を照合する。 */
 bool power_packet_decode(uint16_t id, const uint8_t *data, uint8_t length, power_packet_value_t *value);
 #endif

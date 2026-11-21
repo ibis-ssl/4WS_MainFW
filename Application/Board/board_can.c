@@ -15,6 +15,7 @@ typedef struct {
     uint8_t tx_head, tx_tail, rx_head, rx_tail;
     board_can_stats_t stats;
     uint32_t immediate_buffers;
+    uint16_t immediate_ids[3];
     bool started;
 } can_state_t;
 static can_state_t states[BOARD_CAN_COUNT];
@@ -40,7 +41,12 @@ static bool submit(unsigned int bus, uint16_t id, const uint8_t *data, uint8_t l
         return false;
     }
     uint32_t buffer = HAL_FDCAN_GetLatestTxFifoQRequestBuffer(handles[bus]);
-    if (immediate) { s->immediate_buffers |= buffer; }
+    if (immediate) {
+        s->immediate_buffers |= buffer;
+        for (unsigned int i = 0; i < 3U; ++i) {
+            if (buffer == (1UL << i)) { s->immediate_ids[i] = id; break; }
+        }
+    }
     else { s->immediate_buffers &= ~buffer; }
     s->stats.tx_submitted++;
     return true;
@@ -133,6 +139,21 @@ void board_can_cancel_immediate(board_can_bus_t bus)
     uint32_t pending = s->immediate_buffers;
     if (pending != 0U && HAL_FDCAN_IsTxBufferMessagePending(handles[bus], pending)) {
         (void)HAL_FDCAN_AbortTxRequest(handles[bus], pending);
+    }
+    board_critical_exit(lock);
+}
+void board_can_cancel_immediate_id(board_can_bus_t bus, uint16_t id)
+{
+    if ((unsigned int)bus >= BOARD_CAN_COUNT) { return; }
+    uint32_t lock = board_critical_enter();
+    const can_state_t *s = &states[bus];
+    uint32_t buffers = 0;
+    for (unsigned int i = 0; i < 3U; ++i) {
+        if (s->immediate_ids[i] == id) { buffers |= 1UL << i; }
+    }
+    buffers &= s->immediate_buffers;
+    if (buffers != 0U && HAL_FDCAN_IsTxBufferMessagePending(handles[bus], buffers)) {
+        (void)HAL_FDCAN_AbortTxRequest(handles[bus], buffers);
     }
     board_critical_exit(lock);
 }

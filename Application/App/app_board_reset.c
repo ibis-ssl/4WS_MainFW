@@ -41,6 +41,14 @@ app_board_reset_status_t app_board_reset_status(void)
     return status;
 }
 
+bool app_board_reset_power_allowed(uint32_t now)
+{
+    return status != BOARD_RESET_FAILED && power_submitted && now - power_at >= POWER_SETTLE_MS &&
+           boards[BOARD_CAN_1].phase != BOARD_ERROR && boards[BOARD_CAN_2].phase != BOARD_ERROR &&
+           boards[BOARD_CAN_1].zero_submitted && boards[BOARD_CAN_1].coast_submitted &&
+           boards[BOARD_CAN_2].zero_submitted && boards[BOARD_CAN_2].coast_submitted;
+}
+
 static void fail(void)
 {
     status = BOARD_RESET_FAILED;

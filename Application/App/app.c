@@ -55,6 +55,7 @@ bool app_init(void)
     uint32_t now = board_millis();
     app_debug_uart_init(now);
     app_board_reset_start(now);
+    power_board_supply_start(now);
     led_sequence_begin();
     app_monitor_init();
     if (!board_control_timer_start(APP_CONTROL_FREQUENCY_HZ, app_control_step)) { return false; }
@@ -81,8 +82,13 @@ void app_process(void)
         }
     }
     app_board_reset_process(board_millis());
+    if (power_board_supply_fault()) { app_motor_debug_latch_fault(); }
     app_host_rtt_process();
     app_motor_debug_process();
+    uint32_t now = board_millis();
+    /* ステア更新中も制御出力は停止し、Flash書込み用の給電は維持する。 */
+    power_board_supply_process(now, app_board_reset_power_allowed(now) &&
+                                   app_motor_debug_status() != MOTOR_DEBUG_FAULT);
     app_steer_update_process(board_millis());
     /* 更新応答の回収を優先し、同期I2C転送をFlash書込み中に挟まない。 */
     if (app_steer_update_status().state == STEER_UPDATE_RUNNING) { return; }

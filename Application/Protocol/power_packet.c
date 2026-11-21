@@ -39,6 +39,11 @@ bool power_packet_reset(uint8_t data[8])
     memset(data, 0, 8); data[0] = 0x5A; data[1] = 0xA5;
     return true;
 }
+void power_packet_stop_charge(uint8_t data[8])
+{
+    /* Orionの0x110 standby。F303側では昇圧目標とPWMも解除する。 */
+    memset(data, 0, 8); data[0] = 1U; data[2] = 200U;
+}
 bool power_packet_decode(uint16_t id, const uint8_t *data, uint8_t length, power_packet_value_t *value)
 {
     if (data == NULL || value == NULL) { return false; }
