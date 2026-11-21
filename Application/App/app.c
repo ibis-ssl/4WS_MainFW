@@ -75,7 +75,8 @@ void app_process(void)
                 app_motor_debug_accept_temperature((board_can_bus_t)bus, &frame) ||
                 (ready && app_motor_debug_accept((board_can_bus_t)bus, &frame));
             if (!ready) { app_board_reset_accept((board_can_bus_t)bus, &frame); }
-            if (!motor_frame) { (void)power_board_accept((board_can_bus_t)bus, &frame); }
+            /* 電源の共通エラーは停止経路と電源診断の両方に渡す。 */
+            (void)power_board_accept((board_can_bus_t)bus, &frame);
             app_monitor_accept((board_can_bus_t)bus, &frame, ready && !motor_frame);
         }
     }

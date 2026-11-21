@@ -4,10 +4,11 @@
 #include "Protocol/power_packet.h"
 #include "Board/board_can.h"
 typedef struct {
-    bool battery_valid, capacitor_valid, temperature_valid;
-    float battery_voltage, capacitor_voltage;
-    uint8_t fet_temp, coil_temp[2];
-    uint32_t battery_ms, capacitor_ms, temperature_ms;
+    bool battery_valid, capacitor_valid, temperature_valid, current_valid, flags_valid, fault_seen;
+    float battery_voltage, capacitor_voltage, battery_current, fault_value;
+    uint16_t fault_code;
+    uint8_t fet_temp, coil_temp[2], flags;
+    uint32_t battery_ms, capacitor_ms, temperature_ms, current_ms, flags_ms;
 } power_board_status_t;
 /* 戻り値bit0はCAN1での送信受理。ACK・機器動作完了は別に確認する。 */
 uint8_t power_board_set_on(bool on);

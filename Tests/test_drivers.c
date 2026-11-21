@@ -47,13 +47,26 @@ static FDCAN_RxHeaderTypeDef rx_header_override;
 static bool override_header;
 static uint8_t *uart_rx, *uart_tx;
 static uint16_t uart_tx_length;
-static bool uart_contains(const char *expected)
+static size_t uart_offset(const char *expected)
 {
     size_t length = strlen(expected);
     for (size_t offset = 0; offset + length <= uart_tx_length; ++offset) {
-        if (memcmp(uart_tx + offset, expected, length) == 0) { return true; }
+        if (memcmp(uart_tx + offset, expected, length) == 0) { return offset; }
     }
-    return false;
+    return SIZE_MAX;
+}
+static bool uart_contains(const char *expected) { return uart_offset(expected) != SIZE_MAX; }
+
+static void assert_uart_lines(void)
+{
+    size_t start = 0;
+    for (size_t i = 0; i < uart_tx_length; ++i) {
+        if (uart_tx[i] == '\n') {
+            assert(i > start && uart_tx[i - 1] == '\r' && i - start + 1 <= 200);
+            start = i + 1;
+        }
+    }
+    assert(start == uart_tx_length);
 }
 static uint16_t *adc_values;
 static uint32_t apb_divider = 1, pclk2 = 170000000;
@@ -271,6 +284,17 @@ static void test_power(void)
     f.id=0x200; assert(!power_board_accept(BOARD_CAN_1,&f));
     f.id=0x224; f.data[0]=40; f.data[1]=41; f.data[2]=42; assert(power_board_accept(BOARD_CAN_1,&f));
     assert(power_board_get_status(BOARD_CAN_1,&s) && s.fet_temp==40 && s.coil_temp[1]==42);
+    f = (board_can_frame_t){.id=0x234,.length=4,.data={0,0,0x50,0xC0},.received_ms=101};
+    assert(!power_board_accept(BOARD_CAN_2,&f) && power_board_accept(BOARD_CAN_1,&f));
+    f.data[2]=0x80; f.data[3]=0x7F; assert(!power_board_accept(BOARD_CAN_1,&f));
+    f = (board_can_frame_t){.id=0x244,.length=8,.data={0x15},.received_ms=102};
+    assert(power_board_accept(BOARD_CAN_1,&f));
+    f.length=1; assert(!power_board_accept(BOARD_CAN_1,&f));
+    f = (board_can_frame_t){.id=0,.length=8,.data={100,0,0,0x20,0,0,0xA0,0x41}};
+    assert(!power_board_accept(BOARD_CAN_2,&f) && power_board_accept(BOARD_CAN_1,&f));
+    f.data[0]=0; assert(!power_board_accept(BOARD_CAN_1,&f));
+    assert(power_board_get_status(BOARD_CAN_1,&s) && s.current_valid && s.battery_current == -3.25f && s.current_ms==101);
+    assert(s.flags_valid && s.flags==0x15 && s.flags_ms==102 && s.fault_seen && s.fault_code==0x2000 && s.fault_value==20.0f);
     can_free[0]=0; can_free[1]=3;
     for (unsigned int i=0; i<20; ++i) { assert(board_can_send(BOARD_CAN_1,1,data)); }
     assert(power_board_set_on(true)==0);
@@ -321,7 +345,8 @@ static void test_app_periodic(void)
         if (t < 100U) { assert(timer.CCR1 != 0U); }
         else { assert(timer.CCR1 == 0U); }
         if (t%100U==0) {
-            assert(uart_transfers==t/100U && uart_contains("SYSTEM SW valid="));
+            assert(uart_transfers==t/100U && uart_contains("SYSTEM") && uart_contains("SW V="));
+            assert_uart_lines();
             assert(uart_contains("4ws main start") == (t == 100U));
             HAL_UART_TxCpltCallback(&huart4);
         }
@@ -352,11 +377,28 @@ static void test_app_periodic(void)
     /* CRLFは1ページだけ送り、接続なしの値を0として表示しない。 */
     *uart_rx = '\r'; HAL_UART_RxCpltCallback(&huart4);
     *uart_rx = '\n'; HAL_UART_RxCpltCallback(&huart4);
-    mock_tick=204; app_process(); assert(uart_contains("UART RAW CM4_SPI=n/a"));
+    mock_tick=204; app_process(); assert(uart_contains("UART RAW") && uart_contains("SPI=n/a UART4"));
     HAL_UART_TxCpltCallback(&huart4);
     *uart_rx = '1'; HAL_UART_RxCpltCallback(&huart4);
     *uart_rx = 'q'; HAL_UART_RxCpltCallback(&huart4);
-    mock_tick=304; app_process(); assert(uart_contains("MOTOR Mode=") && uart_contains("C610=4 rpm=--"));
+    mock_tick=304; app_process(); assert(uart_contains("MOTOR") && uart_contains("g3 C4 R=    --"));
+    assert_uart_lines();
+    HAL_UART_TxCpltCallback(&huart4);
+    *uart_rx = '3'; HAL_UART_RxCpltCallback(&huart4);
+    mock_tick=404; app_process();
+    HAL_UART_TxCpltCallback(&huart4);
+    mock_tick=504; app_process(); assert(uart_contains("IB[A]=     --"));
+    size_t temp_column = uart_offset("FET=");
+    assert(temp_column != SIZE_MAX);
+    assert_uart_lines();
+    HAL_UART_TxCpltCallback(&huart4);
+    board_can_frame_t power = {.id=0x234,.length=4,.data={0,0,0x50,0xC0},.received_ms=504};
+    assert(power_board_accept(BOARD_CAN_1,&power));
+    mock_tick=604; app_process(); assert(uart_contains("IB[A]=   -3.3") && uart_offset("FET=")==temp_column);
+    assert_uart_lines();
+    HAL_UART_TxCpltCallback(&huart4);
+    mock_tick=3004; app_process(); assert(uart_contains("IB[A]=  stale") && uart_offset("FET=")==temp_column);
+    assert_uart_lines();
 }
 
 extern uint32_t mock_gpio_low;

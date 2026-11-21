@@ -43,15 +43,23 @@ bool power_packet_decode(uint16_t id, const uint8_t *data, uint8_t length, power
 {
     if (data == NULL || value == NULL) { return false; }
     power_packet_value_t result = {0};
-    if (id == 0x215U || id == 0x216U) {
+    if (id == 0x215U || id == 0x216U || id == 0x234U) {
         if (length != 4U && length != 8U) { return false; }
-        result.kind = id == 0x215U ? POWER_RX_BATTERY : POWER_RX_CAPACITOR;
-        result.voltage = get_float(data);
-        if (!isfinite(result.voltage) || result.voltage < 0.0f) { return false; }
+        result.kind = id == 0x215U ? POWER_RX_BATTERY : id == 0x216U ? POWER_RX_CAPACITOR : POWER_RX_CURRENT;
+        result.value = get_float(data);
+        if (!isfinite(result.value) || (result.kind != POWER_RX_CURRENT && result.value < 0.0f)) { return false; }
     } else if (id == 0x224U) {
         if (length != 8U) { return false; }
         result.kind = POWER_RX_TEMPERATURE;
         result.fet_temp = data[0]; result.coil_temp[0] = data[1]; result.coil_temp[1] = data[2];
+    } else if (id == 0x244U && length == 8U) {
+        result.kind = POWER_RX_FLAGS;
+        result.flags = data[0];
+    } else if (id == 0x000U && length == 8U && data[0] == 100U && data[1] == 0U) {
+        result.kind = POWER_RX_FAULT;
+        result.fault_code = (uint16_t)(data[2] | ((uint16_t)data[3] << 8U));
+        result.value = get_float(data + 4);
+        if (!isfinite(result.value)) { return false; }
     } else { return false; }
     *value = result;
     return true;

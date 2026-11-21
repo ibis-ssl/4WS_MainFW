@@ -30,12 +30,18 @@ bool power_board_accept(board_can_bus_t bus, const board_can_frame_t *frame)
     power_board_status_t *s = &statuses[bus];
     switch (value.kind) {
     case POWER_RX_BATTERY:
-        s->battery_voltage = value.voltage; s->battery_ms = frame->received_ms; s->battery_valid = true; break;
+        s->battery_voltage = value.value; s->battery_ms = frame->received_ms; s->battery_valid = true; break;
     case POWER_RX_CAPACITOR:
-        s->capacitor_voltage = value.voltage; s->capacitor_ms = frame->received_ms; s->capacitor_valid = true; break;
+        s->capacitor_voltage = value.value; s->capacitor_ms = frame->received_ms; s->capacitor_valid = true; break;
     case POWER_RX_TEMPERATURE:
         s->fet_temp = value.fet_temp; s->coil_temp[0] = value.coil_temp[0]; s->coil_temp[1] = value.coil_temp[1];
         s->temperature_ms = frame->received_ms; s->temperature_valid = true; break;
+    case POWER_RX_CURRENT:
+        s->battery_current = value.value; s->current_ms = frame->received_ms; s->current_valid = true; break;
+    case POWER_RX_FLAGS:
+        s->flags = value.flags; s->flags_ms = frame->received_ms; s->flags_valid = true; break;
+    case POWER_RX_FAULT:
+        s->fault_code = value.fault_code; s->fault_value = value.value; s->fault_seen = true; break;
     }
     return true;
 }
