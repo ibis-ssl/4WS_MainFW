@@ -69,6 +69,8 @@ AppはAtlas/C610の割当を先に振り分け、その他を電源処理とOrio
 
 ## UART4デバッグ
 
+Orionの出力項目と4WSで利用できるデータの対応は[デバッグUART出力のOrion比較](design/debug_uart_orion.md)を参照。
+
 `Board/board_debug_uart`を使用する。UART4はPC10 TX／PC11 RX、2,000,000 baud・8N1・flow controlなし・FIFO無効。LPUART1はデバッグに使用しない。
 
 - TXはDMA normal、最大2000 byte。呼出しデータを内部バッファへコピーし、UART送信完了まで保持する。busy・長さ超過・無効引数はfalseで返し、部分送信しない。
