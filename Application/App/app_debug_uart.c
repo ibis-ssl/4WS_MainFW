@@ -67,29 +67,29 @@ static const char *power_marker(bool received, uint32_t age)
     return age >= POWER_FRESH_MS ? "stale" : NULL;
 }
 
-static void decimal(float value, bool signed_value, const char *marker)
+static void decimal(float value, bool signed_value, int width, const char *marker)
 {
     if (!marker && fabsf(value) >= 10000.0f) { marker = "range"; }
-    if (marker) { append("%7s", marker); return; }
+    if (marker) { append("%*s", width, marker); return; }
     long tenths = lroundf(value * 10.0f);
     const char *sign = tenths < 0 ? "-" : signed_value ? "+" : "";
     unsigned long magnitude = (unsigned long)(tenths < 0L ? -tenths : tenths);
-    if (magnitude > 99999U) { append("%7s", "range"); return; }
     char number[16];
-    (void)snprintf(number, sizeof(number), "%s%lu.%lu", sign, magnitude / 10U, magnitude % 10U);
-    append("%7s", number);
+    int length = snprintf(number, sizeof(number), "%s%lu.%lu", sign, magnitude / 10U, magnitude % 10U);
+    append("%*s", width, length > 0 && length <= width ? number : "range");
 }
 
 static void age_ms(uint32_t age)
 {
-    if (age == UINT32_MAX) { append("%10s", "--"); }
-    else { append("%10lu", (unsigned long)age); }
+    if (age == UINT32_MAX) { append("%3s", "--"); }
+    else if (age > 999U) { append("1k+"); }
+    else { append("%3lu", (unsigned long)age); }
 }
 
-static void measurement(int value, bool valid, uint32_t age)
+static void measurement(int value, bool valid, uint32_t age, int width)
 {
-    if (valid) { append("%+6d", value); }
-    else { append("%6s", age == UINT32_MAX ? "--" : "n/a"); }
+    if (valid) { append("%+*d", width, value); }
+    else { append("%*s", width, age == UINT32_MAX ? "--" : "n/a"); }
 }
 
 static const char *motor_state(motor_debug_state_t state)
@@ -101,15 +101,37 @@ static const char *motor_state(motor_debug_state_t state)
 static void motor(uint32_t now)
 {
     motor_debug_status_t data = app_motor_debug_snapshot(now);
-    append("Md=%u St=%-5s TG[rpm]=%+6d", (unsigned)data.mode_active, motor_state(data.state), data.target_rpm);
-    end_line();
+    append("M=%u %-5s TG=%+4d R[rpm]=", (unsigned)data.mode_active, motor_state(data.state), data.target_rpm);
     for (unsigned int g = 0; g < 4U; ++g) {
         const motor_debug_axis_status_t *a = &data.axes[g];
-        append(g % 2U == 0U ? "MOTOR    g%u C%u R=" : " | g%u C%u R=", g, g + 1U);
-        measurement(a->drive_rpm, a->drive_fresh, a->drive_age_ms);
-        append(" Ir="); measurement(a->drive_raw_current, a->drive_fresh, a->drive_age_ms);
-        append(" C[mA]=%+6d A[ms]=", a->drive_command_ma); age_ms(a->drive_age_ms);
-        if (g % 2U == 1U) { end_line(); }
+        append(g ? "," : "");
+        measurement(a->drive_rpm, a->drive_fresh, a->drive_age_ms, 6);
+    }
+    append(" Ir=");
+    for (unsigned int g = 0; g < 4U; ++g) {
+        const motor_debug_axis_status_t *a = &data.axes[g];
+        append(g ? "," : "");
+        measurement(a->drive_raw_current, a->drive_fresh, a->drive_age_ms, 6);
+    }
+    append(" C[mA]=");
+    for (unsigned int g = 0; g < 4U; ++g) { append(g ? ",%+4d" : "%+4d", data.axes[g].drive_command_ma); }
+    append(" A=");
+    for (unsigned int g = 0; g < 4U; ++g) { if (g) { append(","); } age_ms(data.axes[g].drive_age_ms); }
+}
+
+static void motion_angles(const motor_debug_status_t *data)
+{
+    append("T[mrad]=");
+    for (unsigned int g = 0; g < 4U; ++g) {
+        const motor_debug_axis_status_t *a = &data->axes[g];
+        if (g) { append(","); }
+        measurement(a->steer_target_mrad, a->steer_target_valid, a->steer_age_ms, 6);
+    }
+    append(" P[mrad]=");
+    for (unsigned int g = 0; g < 4U; ++g) {
+        const motor_debug_axis_status_t *a = &data->axes[g];
+        if (g) { append(","); }
+        measurement(a->steer_angle_mrad, a->steer_fresh && a->steer_angle_mrad != INT16_MIN, a->steer_age_ms, 6);
     }
 }
 
@@ -117,25 +139,34 @@ static void motion(uint32_t now)
 {
     motor_debug_status_t data = app_motor_debug_snapshot(now);
     steer_temperature_t temp = app_motor_debug_temperature(now);
-    append("Md=%u St=%-5s", (unsigned)data.mode_active, motor_state(data.state));
-    end_line();
+    append("M=%u %-5s ", (unsigned)data.mode_active, motor_state(data.state));
+    motion_angles(&data);
+    append(" I=");
     for (unsigned int g = 0; g < 4U; ++g) {
         const motor_debug_axis_status_t *a = &data.axes[g];
-        append(g % 2U == 0U ? "STEER    g%u T=" : " | g%u T=", g);
-        measurement(a->steer_target_mrad, a->steer_target_valid, a->steer_age_ms);
-        append(" P=");
-        measurement(a->steer_angle_mrad, a->steer_fresh && a->steer_angle_mrad != INT16_MIN, a->steer_age_ms);
-        append(" I=");
-        measurement(a->steer_current_ma, a->steer_fresh && a->steer_current_ma != UINT16_MAX, a->steer_age_ms);
-        append(" C=%3s", a->cal_fresh ? (a->steer_initialized ? "1" : "0") : "--");
-        if (a->cal_fresh) { append(" S=%3u", (unsigned)a->steer_state); }
-        else { append(" S=%3s", "--"); }
-        append(" H=");
-        measurement(temp.decic[g], (temp.valid_mask & (1U << g)) != 0U,
-                    (temp.seen_mask & (1U << g)) != 0U ? 0U : UINT32_MAX);
-        append(" A="); age_ms(a->steer_age_ms);
-        if (g % 2U == 1U) { end_line(); }
+        if (g) { append(","); }
+        if (a->steer_fresh && a->steer_current_ma < 10000U) { append("%4u", (unsigned)a->steer_current_ma); }
+        else { append("%4s", a->steer_age_ms == UINT32_MAX ? "--" : "n/a"); }
     }
+    append(" C=");
+    for (unsigned int g = 0; g < 4U; ++g) {
+        const motor_debug_axis_status_t *a = &data.axes[g];
+        append("%c", a->cal_fresh ? (a->steer_initialized ? '1' : '0') : '-');
+    }
+    append(" S=");
+    for (unsigned int g = 0; g < 4U; ++g) {
+        const motor_debug_axis_status_t *a = &data.axes[g];
+        append("%c", a->cal_fresh && a->steer_state <= 9U ? '0' + a->steer_state : '-');
+    }
+    append(" H=");
+    for (unsigned int g = 0; g < 4U; ++g) {
+        if (g) { append(","); }
+        bool valid = (temp.valid_mask & (1U << g)) != 0U && temp.decic[g] >= -9999 && temp.decic[g] <= 9999;
+        measurement(temp.decic[g], valid,
+                    (temp.seen_mask & (1U << g)) != 0U ? 0U : UINT32_MAX, 5);
+    }
+    append(" A=");
+    for (unsigned int g = 0; g < 4U; ++g) { if (g) { append(","); } age_ms(data.axes[g].steer_age_ms); }
 }
 
 static void odom(void)
@@ -147,16 +178,32 @@ static void odom(void)
     append(" Acc=");
     for (unsigned int i = 0; i < 3U; ++i) {
         if (i != 0U) { append(","); }
-        measurement(imu.raw_accel[i], imu.valid, UINT32_MAX);
+        measurement(imu.raw_accel[i], imu.valid, UINT32_MAX, 6);
     }
     append(" Gyr=");
     for (unsigned int i = 0; i < 3U; ++i) {
         if (i != 0U) { append(","); }
-        measurement(imu.raw_gyro[i], imu.valid, UINT32_MAX);
+        measurement(imu.raw_gyro[i], imu.valid, UINT32_MAX, 6);
     }
-    append(" H="); measurement((int)lroundf(imu.temperature_c * 10.0f), imu.valid, UINT32_MAX);
+    append(" H="); measurement((int)lroundf(imu.temperature_c * 10.0f), imu.valid, UINT32_MAX, 5);
     append(" Yaw=n/a Odom=n/a");
-    end_line();
+}
+
+static void counter(uint32_t value)
+{
+    /* 常用範囲は整数で表示し、桁あふれ時も累積カウンターの列幅を保つ。 */
+    if (value < 10000U) { append("%4lu", (unsigned long)value); }
+    else if (value < 1000000U) { append("%3luk", (unsigned long)(value / 1000U)); }
+    else if (value < 1000000000U) { append("%3luM", (unsigned long)(value / 1000000U)); }
+    else { append("%3luG", (unsigned long)(value / 1000000000U)); }
+}
+
+static void counters(const uint32_t *values, size_t count)
+{
+    for (size_t i = 0; i < count; ++i) {
+        if (i) { append(","); }
+        counter(values[i]);
+    }
 }
 
 static void system_page(void)
@@ -164,60 +211,56 @@ static void system_page(void)
     board_control_timer_stats_t control;
     board_control_timer_get_stats(&control);
     user_switch_t key = user_switch_decode((uint16_t)app_monitor_status.sw_raw, app_monitor_status.sw_valid != 0U);
-    append("SW V=%lu ADC=%4lu K=%2X E=%10lu DIP=", (unsigned long)app_monitor_status.sw_valid,
-           (unsigned long)app_monitor_status.sw_raw, (unsigned)key, (unsigned long)board_user_adc_error_count());
+    append("Ad=%4lu/%lu K=%2X E=", (unsigned long)app_monitor_status.sw_raw,
+           (unsigned long)app_monitor_status.sw_valid, (unsigned)key);
+    counter(board_user_adc_error_count());
+    append(" D=");
     for (unsigned int i = 0; i < 4U; ++i) {
         bool high;
         append("%c", board_gpio_read_input((board_gpio_input_t)(BOARD_GPIO_INPUT_DIP_0 + i), &high) ? (high ? '1' : '0') : '?');
     }
-    end_line();
     for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
         board_can_stats_t s;
         (void)board_can_get_stats((board_can_bus_t)bus, &s);
-        append("CAN%u     RX=%10lu RD=%10lu Lost=%10lu BO=%10lu TX=%10lu TE=%10lu TQ=%10lu TD=%10lu", bus + 1U,
-               (unsigned long)s.rx_received, (unsigned long)s.rx_dropped, (unsigned long)s.rx_lost,
-               (unsigned long)s.bus_off_events, (unsigned long)s.tx_submitted, (unsigned long)s.tx_errors,
-               (unsigned long)s.tx_buffered, (unsigned long)s.tx_dropped);
-        end_line();
+        const uint32_t values[] = {s.rx_received, s.rx_dropped, s.rx_lost, s.bus_off_events,
+                                   s.tx_submitted, s.tx_errors, s.tx_buffered, s.tx_dropped};
+        append(" C%u=", bus + 1U);
+        counters(values, sizeof(values) / sizeof(values[0]));
     }
-    append("CTRL     N=%10lu Ov=%10lu Cy=%10lu Us=%10lu / OLED ID=%2lX N=%10lu E=%10lu",
-           (unsigned long)control.calls, (unsigned long)control.overruns, (unsigned long)control.max_execution_cycles,
-           (unsigned long)control.max_entry_delay_us, (unsigned long)app_monitor_status.oled_address,
-           (unsigned long)app_monitor_status.oled_frames, (unsigned long)app_monitor_status.oled_errors);
-    end_line();
+    const uint32_t timing[] = {control.calls, control.overruns, control.max_execution_cycles, control.max_entry_delay_us};
+    append(" T="); counters(timing, sizeof(timing) / sizeof(timing[0]));
+    append(" O=%2lX,", (unsigned long)app_monitor_status.oled_address);
+    const uint32_t oled[] = {app_monitor_status.oled_frames, app_monitor_status.oled_errors};
+    counters(oled, sizeof(oled) / sizeof(oled[0]));
 }
 
 static void kicker(const power_board_status_t *power, uint32_t now)
 {
-    append("CAN1 VC[V]="); decimal(power->capacitor_voltage, false, power_marker(power->capacitor_valid, now - power->capacitor_ms));
-    append(" IB[A]="); decimal(power->battery_current, true, power_marker(power->current_valid, now - power->current_ms));
+    append("VC="); decimal(power->capacitor_voltage, false, 5, power_marker(power->capacitor_valid, now - power->capacitor_ms));
+    append(" IB="); decimal(power->battery_current, true, 6, power_marker(power->current_valid, now - power->current_ms));
     const char *temp = power_marker(power->temperature_valid, now - power->temperature_ms);
     if (temp) { append(" FET=%5s L1=%5s L2=%5s", temp, temp, temp); }
     else { append(" FET=%5u L1=%5u L2=%5u", (unsigned)power->fet_temp, (unsigned)power->coil_temp[0], (unsigned)power->coil_temp[1]); }
-    end_line();
     const char *flags = power_marker(power->flags_valid, now - power->flags_ms);
     char bits[5];
     for (unsigned int i = 0; i < sizeof(bits); ++i) {
         bits[i] = flags ? '-' : ((power->flags >> i) & 1U) ? '1' : '0';
     }
-    append("PWR      ");
+    append(" ");
     if (flags) { append("Fl=%5s", flags); }
     else { append("Fl=%5X", (unsigned)power->flags); }
     append(" Bst=%c Kick=%c Chg=%c En=%c Out=%c", bits[0], bits[1], bits[2], bits[3], bits[4]);
     if (power->fault_seen) { append(" Err=%4X", (unsigned)power->fault_code); }
     else { append(" Err=%4s", "--"); }
-    append(" Val="); decimal(power->fault_value, true, power->fault_seen ? NULL : "--");
-    end_line();
+    append(" Val="); decimal(power->fault_value, true, 7, power->fault_seen ? NULL : "--");
 }
 
 static void uart_raw(void)
 {
     board_debug_uart_stats_t s;
     board_debug_uart_get_stats(&s);
-    append("SPI=n/a UART4 TX=%10lu RJ=%10lu TE=%10lu RD=%10lu RE=%10lu",
-           (unsigned long)s.tx_completed, (unsigned long)s.tx_rejected, (unsigned long)s.tx_errors,
-           (unsigned long)s.rx_dropped, (unsigned long)s.rx_errors);
-    end_line();
+    const uint32_t values[] = {s.tx_completed, s.tx_rejected, s.tx_errors, s.rx_dropped, s.rx_errors};
+    append("SPI=n/a U4="); counters(values, sizeof(values) / sizeof(values[0]));
 }
 
 void app_debug_uart_init(uint32_t now)
@@ -254,8 +297,8 @@ void app_debug_uart_process(uint32_t now)
     (void)power_board_get_status(BOARD_CAN_1, &power);
     static const char *const reset[] = {"WAIT", "RDY", "FAIL"};
     motor_debug_state_t state = app_motor_debug_status();
-    append("%-8s VB[V]=", names[page]);
-    decimal(power.battery_voltage, false, power_marker(power.battery_valid, now - power.battery_ms));
+    append("%-8s VB=", names[page]);
+    decimal(power.battery_voltage, false, 5, power_marker(power.battery_valid, now - power.battery_ms));
     append(" BT=%-4s F=%u ", reset[app_board_reset_status()], (unsigned)(state == MOTOR_DEBUG_FAULT));
     switch (page) {
     case MOTOR: motor(now); break;
@@ -264,10 +307,11 @@ void app_debug_uart_process(uint32_t now)
     case MOTION: motion(now); break;
     case SYSTEM: system_page(); break;
     case UART_RAW: uart_raw(); break;
-    case CMD: append("SPI=n/a"); end_line(); break;
-    case LATENCY: append("SPI=n/a CAM=n/a"); end_line(); break;
-    case VEL: append("Body=n/a C610=1:MOTOR"); end_line(); break;
-    default: append("n/a"); end_line(); break;
+    case CMD: append("SPI=n/a"); break;
+    case LATENCY: append("SPI=n/a CAM=n/a"); break;
+    case VEL: append("Body=n/a C610=1:MOTOR"); break;
+    default: append("n/a"); break;
     }
+    end_line();
     if (used < sizeof(text) && board_debug_uart_write(text, used)) { banner_pending = menu_pending = false; }
 }

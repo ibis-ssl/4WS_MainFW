@@ -57,16 +57,18 @@ static size_t uart_offset(const char *expected)
 }
 static bool uart_contains(const char *expected) { return uart_offset(expected) != SIZE_MAX; }
 
-static void assert_uart_lines(void)
+static size_t assert_uart_lines(void)
 {
-    size_t start = 0;
+    size_t start = 0, lines = 0;
     for (size_t i = 0; i < uart_tx_length; ++i) {
         if (uart_tx[i] == '\n') {
             assert(i > start && uart_tx[i - 1] == '\r' && i - start + 1 <= 200);
             start = i + 1;
+            lines++;
         }
     }
     assert(start == uart_tx_length);
+    return lines;
 }
 static uint16_t *adc_values;
 static uint32_t apb_divider = 1, pclk2 = 170000000;
@@ -345,8 +347,8 @@ static void test_app_periodic(void)
         if (t < 100U) { assert(timer.CCR1 != 0U); }
         else { assert(timer.CCR1 == 0U); }
         if (t%100U==0) {
-            assert(uart_transfers==t/100U && uart_contains("SYSTEM") && uart_contains("SW V="));
-            assert_uart_lines();
+            assert(uart_transfers==t/100U && uart_contains("SYSTEM") && uart_contains("Ad="));
+            assert(assert_uart_lines() == (t == 100U ? 4U : 1U));
             assert(uart_contains("4ws main start") == (t == 100U));
             HAL_UART_TxCpltCallback(&huart4);
         }
@@ -377,28 +379,34 @@ static void test_app_periodic(void)
     /* CRLFは1ページだけ送り、接続なしの値を0として表示しない。 */
     *uart_rx = '\r'; HAL_UART_RxCpltCallback(&huart4);
     *uart_rx = '\n'; HAL_UART_RxCpltCallback(&huart4);
-    mock_tick=204; app_process(); assert(uart_contains("UART RAW") && uart_contains("SPI=n/a UART4"));
+    mock_tick=204; app_process(); assert(uart_contains("UART RAW") && uart_contains("SPI=n/a U4="));
     HAL_UART_TxCpltCallback(&huart4);
     *uart_rx = '1'; HAL_UART_RxCpltCallback(&huart4);
     *uart_rx = 'q'; HAL_UART_RxCpltCallback(&huart4);
-    mock_tick=304; app_process(); assert(uart_contains("MOTOR") && uart_contains("g3 C4 R=    --"));
-    assert_uart_lines();
+    mock_tick=304; app_process(); assert(uart_contains("MOTOR") && uart_contains("R[rpm]=    --,    --,    --,    --"));
+    assert(assert_uart_lines() == 2U);
     HAL_UART_TxCpltCallback(&huart4);
     *uart_rx = '3'; HAL_UART_RxCpltCallback(&huart4);
     mock_tick=404; app_process();
     HAL_UART_TxCpltCallback(&huart4);
-    mock_tick=504; app_process(); assert(uart_contains("IB[A]=     --"));
+    mock_tick=504; app_process(); assert(uart_contains("IB=    --"));
     size_t temp_column = uart_offset("FET=");
     assert(temp_column != SIZE_MAX);
-    assert_uart_lines();
+    assert(assert_uart_lines() == 1U);
     HAL_UART_TxCpltCallback(&huart4);
     board_can_frame_t power = {.id=0x234,.length=4,.data={0,0,0x50,0xC0},.received_ms=504};
     assert(power_board_accept(BOARD_CAN_1,&power));
-    mock_tick=604; app_process(); assert(uart_contains("IB[A]=   -3.3") && uart_offset("FET=")==temp_column);
-    assert_uart_lines();
+    mock_tick=604; app_process(); assert(uart_contains("IB=  -3.3") && uart_offset("FET=")==temp_column);
+    assert(assert_uart_lines() == 1U);
     HAL_UART_TxCpltCallback(&huart4);
-    mock_tick=3004; app_process(); assert(uart_contains("IB[A]=  stale") && uart_offset("FET=")==temp_column);
-    assert_uart_lines();
+    mock_tick=3004; app_process(); assert(uart_contains("IB= stale") && uart_offset("FET=")==temp_column);
+    assert(assert_uart_lines() == 1U);
+    HAL_UART_TxCpltCallback(&huart4);
+    *uart_rx = '6'; HAL_UART_RxCpltCallback(&huart4);
+    mock_tick=3104; app_process(); assert(uart_contains("T[mrad]=    --,    --,    --,    --"));
+    assert(assert_uart_lines() == 2U);
+    HAL_UART_TxCpltCallback(&huart4);
+    mock_tick=3204; app_process(); assert(assert_uart_lines() == 1U);
 }
 
 extern uint32_t mock_gpio_low;
