@@ -1,5 +1,6 @@
 # 検証記録
 
+- [2026-11-21 電源PowerOn周期と昇圧・キッカー停止](2026-11/power_keepalive_20261121.md)
 - [2026-11-21 UART4の1行表示](2026-11/uart_single_line_20261121.md)
 - [2026-11-21 UART4固定幅と電源基板テレメトリー](2026-11/uart_fixed_width_power_20261121.md)
 - [2026-11-21 Orion形式のUART4診断ページ](2026-11/debug_uart_20261121.md)
