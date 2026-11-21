@@ -47,6 +47,14 @@ static FDCAN_RxHeaderTypeDef rx_header_override;
 static bool override_header;
 static uint8_t *uart_rx, *uart_tx;
 static uint16_t uart_tx_length;
+static bool uart_contains(const char *expected)
+{
+    size_t length = strlen(expected);
+    for (size_t offset = 0; offset + length <= uart_tx_length; ++offset) {
+        if (memcmp(uart_tx + offset, expected, length) == 0) { return true; }
+    }
+    return false;
+}
 static uint16_t *adc_values;
 static uint32_t apb_divider = 1, pclk2 = 170000000;
 static const char *rtt_input = "";
@@ -312,7 +320,11 @@ static void test_app_periodic(void)
         app_process();
         if (t < 100U) { assert(timer.CCR1 != 0U); }
         else { assert(timer.CCR1 == 0U); }
-        if (t%100U==0) { assert(uart_transfers==t/100U); HAL_UART_TxCpltCallback(&huart4); }
+        if (t%100U==0) {
+            assert(uart_transfers==t/100U && uart_contains("SYSTEM SW valid="));
+            assert(uart_contains("4ws main start") == (t == 100U));
+            HAL_UART_TxCpltCallback(&huart4);
+        }
     }
     board_control_timer_stats_t s; board_control_timer_get_stats(&s); assert(s.calls==500);
     /* mainを停止しても制御IRQの入力取込みと実行回数は進む。 */
@@ -336,6 +348,15 @@ static void test_app_periodic(void)
     HAL_UART_TxCpltCallback(&huart4);
     mock_tick=103; app_process(); assert(uart_transfers==15);
     mock_tick=104; app_process(); assert(uart_transfers==16);
+    HAL_UART_TxCpltCallback(&huart4);
+    /* CRLFは1ページだけ送り、接続なしの値を0として表示しない。 */
+    *uart_rx = '\r'; HAL_UART_RxCpltCallback(&huart4);
+    *uart_rx = '\n'; HAL_UART_RxCpltCallback(&huart4);
+    mock_tick=204; app_process(); assert(uart_contains("UART RAW CM4_SPI=n/a"));
+    HAL_UART_TxCpltCallback(&huart4);
+    *uart_rx = '1'; HAL_UART_RxCpltCallback(&huart4);
+    *uart_rx = 'q'; HAL_UART_RxCpltCallback(&huart4);
+    mock_tick=304; app_process(); assert(uart_contains("MOTOR Mode=") && uart_contains("C610=4 rpm=--"));
 }
 
 extern uint32_t mock_gpio_low;

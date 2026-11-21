@@ -3,12 +3,12 @@
  * 起動時の周辺基板リセットとモーターデバッグは、それぞれ専用モジュールで管理する。
  */
 #include "App/app.h"
+#include "App/app_debug_uart.h"
 #include "Board/board_can.h"
 #include "Board/board_debug_uart.h"
 #include "Board/board_debug_rtt.h"
 #include "Board/board_user_adc.h"
 #include "Board/board_buzzer.h"
-#include "Device/user_switch.h"
 #include "Device/power_board.h"
 #include "Device/buzzer.h"
 #include "App/app_control.h"
@@ -21,7 +21,6 @@
 #include "App/app_steer_update.h"
 #include "Board/board_gpio.h"
 
-static uint32_t report_ms;
 static uint32_t led_sequence_ms;
 static unsigned int led_sequence_index;
 static void set_led_sequence(board_gpio_led_t led, bool on)
@@ -53,8 +52,9 @@ bool app_init(void)
     if (!board_debug_uart_init() || !board_user_adc_init() || !board_can_init() || !board_buzzer_init()) {
         return false;
     }
-    report_ms = board_millis();
-    app_board_reset_start(report_ms);
+    uint32_t now = board_millis();
+    app_debug_uart_init(now);
+    app_board_reset_start(now);
     led_sequence_begin();
     app_monitor_init();
     if (!board_control_timer_start(APP_CONTROL_FREQUENCY_HZ, app_control_step)) { return false; }
@@ -85,38 +85,6 @@ void app_process(void)
     app_steer_update_process(board_millis());
     /* 更新応答の回収を優先し、同期I2C転送をFlash書込み中に挟まない。 */
     if (app_steer_update_status().state == STEER_UPDATE_RUNNING) { return; }
-    uint8_t byte;
-    for (unsigned int n = 0; n < 32U && board_debug_uart_read(&byte); ++n) {
-        /* 入力で定期出力を増速しない。操作コマンドは今後Appで定義する。 */
-        (void)byte;
-    }
     app_monitor_process();
-    uint32_t now = board_millis();
-    uint32_t elapsed = now - report_ms;
-    if (elapsed >= 100U) {
-        /* 元の100 ms位相を維持し、遅延分をまとめて連続出力しない。 */
-        report_ms += (elapsed / 100U) * 100U;
-        if (!board_debug_uart_ready()) { return; }
-        board_user_adc_sample_t sample = {0};
-        bool valid = board_user_adc_read(&sample);
-        board_can_stats_t can1, can2;
-        board_can_get_stats(BOARD_CAN_1, &can1);
-        board_can_get_stats(BOARD_CAN_2, &can2);
-        board_control_timer_stats_t control;
-        board_control_timer_get_stats(&control);
-        /* 浮動小数点printfに依存せず、取得有効性とドライバ状態を確認できる。 */
-        (void)p("SW valid=%u raw=%u key_mask=%02X ADC errors=%lu; CAN rx=%lu/%lu drop=%lu/%lu busoff=%lu/%lu; CTRL calls=%lu overrun=%lu max_cycles=%lu delay_us=%lu; IMU who=%02lX valid=%lu samples=%lu err=%lu az=%ld gz=%ld; OLED addr=%02lX frames=%lu err=%lu\r\n",
-            (unsigned)valid, (unsigned)sample.raw, (unsigned)user_switch_decode(sample.raw, valid),
-            (unsigned long)board_user_adc_error_count(),
-            (unsigned long)can1.rx_received, (unsigned long)can2.rx_received,
-            (unsigned long)can1.rx_dropped, (unsigned long)can2.rx_dropped,
-            (unsigned long)can1.bus_off_events, (unsigned long)can2.bus_off_events,
-            (unsigned long)control.calls, (unsigned long)control.overruns,
-            (unsigned long)control.max_execution_cycles, (unsigned long)control.max_entry_delay_us,
-            (unsigned long)app_monitor_status.imu_who, (unsigned long)app_monitor_status.imu_valid,
-            (unsigned long)app_monitor_status.imu_samples, (unsigned long)app_monitor_status.imu_errors,
-            (long)app_monitor_status.accel_raw[2], (long)app_monitor_status.gyro_raw[2],
-            (unsigned long)app_monitor_status.oled_address, (unsigned long)app_monitor_status.oled_frames,
-            (unsigned long)app_monitor_status.oled_errors);
-    }
+    app_debug_uart_process(board_millis());
 }

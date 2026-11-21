@@ -385,6 +385,34 @@ static bool send_steering(uint32_t now)
     return true;
 }
 
+motor_debug_status_t app_motor_debug_snapshot(uint32_t now)
+{
+    motor_debug_status_t result = {
+        .state = app_motor_debug_status(), .mode_active = mode_active,
+        .target_rpm = motion == MOTOR_DEBUG_DRIVE ? (int16_t)lroundf(ramped_rpm) : 0,
+    };
+    for (unsigned int i = 0; i < WHEEL_COUNT; ++i) {
+        const wheel_t *wheel = &wheels[i];
+        const steering_t *board = &steering[i / 2U];
+        unsigned int axis = i % 2U;
+        result.axes[i] = (motor_debug_axis_status_t){
+            .drive_age_ms = wheel->samples != 0U ? now - wheel->received_ms : UINT32_MAX,
+            .steer_age_ms = board->seen ? now - board->feedback_ms : UINT32_MAX,
+            .cal_age_ms = board->calibrated_message ? now - board->calibration_ms : UINT32_MAX,
+            .drive_rpm = wheel->feedback.rpm, .drive_raw_current = wheel->feedback.raw_current,
+            .drive_command_ma = wheel->command_ma,
+            .steer_angle_mrad = board->axes[axis].angle_mrad, .steer_current_ma = board->axes[axis].current_ma,
+            .steer_target_mrad = (int16_t)lroundf(board->range[axis].target_mrad),
+            .steer_state = board->calibration[axis].state, .steer_initialized = board->calibration[axis].initialized,
+            .drive_fresh = wheel->samples != 0U && fresh(now, wheel->received_ms, DRIVE_TIMEOUT_MS),
+            .steer_fresh = board->seen && fresh(now, board->feedback_ms, ATLAS_TIMEOUT_MS),
+            .cal_fresh = board->calibrated_message && fresh(now, board->calibration_ms, CALIBRATION_TIMEOUT_MS),
+            .steer_target_valid = steering_fresh(board, now) && board->range_step == RANGE_READ_COUNT,
+        };
+    }
+    return result;
+}
+
 static void rtt_status(uint32_t now)
 {
     unsigned int cal = 0, esc = 0, ranges = 0;

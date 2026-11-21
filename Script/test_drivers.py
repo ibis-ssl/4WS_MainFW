@@ -32,6 +32,7 @@ sources = [
     'Application/Device/user_switch.c', 'Application/Device/user_switch_board.c',
     'Application/Protocol/power_packet.c', 'Application/Device/power_board.c',
     'Application/Board/board_control_timer.c', 'Application/App/app_control.c', 'Application/App/app.c',
+    'Application/App/app_debug_uart.c',
 ]
 exe = out / 'test_drivers.exe'
 subprocess.run([compiler, '-std=c11', '-Wall', '-Wextra', '-Werror',
