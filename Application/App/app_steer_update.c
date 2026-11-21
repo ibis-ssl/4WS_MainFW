@@ -2,6 +2,8 @@
 #include "App/app_steer_update.h"
 #include "App/app_board_reset.h"
 #include "App/app_motor_debug.h"
+#include "App/app_power_features.h"
+#include "App/app_power_update.h"
 #include "Protocol/atlas_motor_packet.h"
 #include <string.h>
 
@@ -72,6 +74,7 @@ bool app_steer_update_begin(uint8_t board, uint32_t size, uint32_t crc, uint32_t
     if (board >= BOARD_CAN_COUNT || size < TAG_OFFSET + 8U || size > CAPACITY ||
         state.state == STEER_UPDATE_STAGING || state.state == STEER_UPDATE_RUNNING ||
         app_board_reset_status() == BOARD_RESET_PENDING || !app_motor_debug_idle() ||
+        app_power_update_locked() || !app_power_features_bench_idle() ||
         (target_changed && state.board != board)) { return false; }
     state = (steer_update_status_t){.state = STEER_UPDATE_STAGING, .board = board, .size = size, .image_crc = crc};
     stage_crc = UINT32_MAX;

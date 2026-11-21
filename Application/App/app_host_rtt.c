@@ -1,6 +1,7 @@
 /* RTTのデバッグ用テキストを、モーター診断とCM4相当の更新APIに振り分ける。 */
 #include "App/app_host_rtt.h"
 #include "App/app_motor_debug.h"
+#include "App/app_power_update.h"
 #include "App/app_steer_update.h"
 #include "Board/board_debug_rtt.h"
 #include "Board/board_time.h"
@@ -31,7 +32,7 @@ static bool read_number(const char **cursor, uint32_t base, uint32_t *value, cha
     return true;
 }
 
-static bool stage_line(const char *line, uint32_t now)
+static bool stage_line(const char *line, uint32_t now, bool power)
 {
     uint32_t at;
     if (!read_number(&line, 10, &at, ' ')) { return false; }
@@ -43,6 +44,7 @@ static bool stage_line(const char *line, uint32_t now)
         if (high < 0 || low < 0) { return false; }
         data[i] = (uint8_t)(high * 16 + low);
     }
+    if (power) { return app_power_update_stage(at, data, (uint32_t)(length / 2U), now); }
     return app_steer_update_stage(at, data, (uint32_t)(length / 2U), now);
 }
 
@@ -58,8 +60,48 @@ static void update_status(void)
     board_debug_rtt_write(line);
 }
 
+static void power_command(const char *line)
+{
+    if (strcmp(line, "pwr_status") == 0) {
+        power_update_status_t s = app_power_update_status();
+        char out[128];
+        (void)snprintf(out, sizeof(out), "PWR state=%u step=%u error=%u staged=%lu written=%lu size=%lu crc=%08lX\n",
+            (unsigned)s.state, (unsigned)s.step, (unsigned)s.error, (unsigned long)s.staged,
+            (unsigned long)s.written, (unsigned long)s.size, (unsigned long)s.crc);
+        board_debug_rtt_write(out);
+        return;
+    }
+    if (strcmp(line, "pwr_version_status") == 0) {
+        uint32_t build, crc;
+        bool valid = app_power_version_read(&build, &crc);
+        char out[82];
+        (void)snprintf(out, sizeof(out), "PVER valid=%u build=%08lX crc=%08lX\n",
+            (unsigned)valid, (unsigned long)build, (unsigned long)crc);
+        board_debug_rtt_write(out);
+        return;
+    }
+    uint32_t now = board_millis();
+    bool ok = false;
+    if (strncmp(line, "pwr_begin ", 10) == 0) {
+        const char *cursor = line + 10;
+        uint32_t size, crc, build;
+        ok = read_number(&cursor, 10, &size, ' ') && read_number(&cursor, 16, &crc, ' ') &&
+            read_number(&cursor, 16, &build, '\0') && app_power_update_begin(size, crc, build, now);
+    } else if (strncmp(line, "pwr_data ", 9) == 0) {
+        ok = stage_line(line + 9, now, true);
+    } else if (strcmp(line, "pwr_commit") == 0) {
+        ok = app_power_update_commit(now);
+    } else if (strcmp(line, "pwr_abort") == 0) {
+        ok = app_power_update_abort();
+    } else if (strcmp(line, "pwr_version") == 0) {
+        ok = app_power_version_request();
+    }
+    board_debug_rtt_write(ok ? "OK pwr\n" : "REJECT pwr\n");
+}
+
 static void dispatch(const char *line)
 {
+    if (strncmp(line, "pwr_", 4) == 0) { power_command(line); return; }
     if (strcmp(line, "temp") == 0) {
         steer_temperature_t value = app_motor_debug_temperature(board_millis());
         char text[100];
@@ -80,7 +122,7 @@ static void dispatch(const char *line)
             read_number(&cursor, 10, &size, ' ') && read_number(&cursor, 16, &crc, '\0') &&
             app_steer_update_begin((uint8_t)board, size, crc, now);
     } else if (strncmp(line, "fw_data ", 8) == 0) {
-        ok = stage_line(line + 8, now);
+        ok = stage_line(line + 8, now, false);
     } else if (strcmp(line, "fw_commit") == 0) {
         ok = app_steer_update_commit(now);
     } else if (strcmp(line, "fw_abort") == 0) {

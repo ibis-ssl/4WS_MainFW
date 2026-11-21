@@ -6,7 +6,7 @@
 
 IDの用途・バイト配置・型・単位の正本は[Orion CAN契約](../specs/common/orion_can.md#テレメトリー)。以下は本FWのデコーダー対応範囲と値の保持方法を示す。AtlasのCAN接続先・バス・操舵軸への割当とwire形式案は[MainFWのCAN詳細](design/atlas_can.md)で管理する。上位の輪番号の意味・制御責務はspecsを参照し、接続仕様とは区別する。
 
-`Protocol/orion_telemetry`が共通契約の配置を復号し、`Device/orion_can`がバス別・ID別の最新値と受信時刻を保持する。`app_process()`はAtlas/C610の予約IDを先に取り分け、その他をOrion解析へ渡す。CAN2の電源通知は専用処理でも復号するため、共通エラー `0x000` を停止判断と電源診断の両方で扱える。Orion解析は8 byte限定で、NaN/Infは拒否する。[電源基板の受理条件](drivers.md#電源基板)
+`Protocol/orion_telemetry`が共通契約の配置を復号し、`Device/orion_can`がバス別・ID別の最新値と受信時刻を保持する。`app_process()`はAtlas/C610や電源診断の専用フレームを先に取り分け、その他をOrion解析へ渡す。共通エラー `0x000` は停止判断と電源診断の両方で扱う。Orion解析は通常8 byteで、マウス `0x241` は6 byteも受理する。NaN/Infは拒否する。[電源基板の受理条件](drivers.md#電源基板)
 
 | 対応ID | デコーダーの分類 |
 |---|---|

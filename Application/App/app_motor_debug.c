@@ -1,10 +1,12 @@
 #include "App/app_motor_debug.h"
 #include "App/app_board_reset.h"
 #include "App/app_steer_update.h"
+#include "App/app_power_update.h"
 #include "Board/board_gpio.h"
 #include "Board/board_debug_rtt.h"
 #include "Board/board_time.h"
 #include "Device/user_switch.h"
+#include "Device/power_board.h"
 #include "Protocol/atlas_motor_packet.h"
 #include <math.h>
 #include <stdio.h>
@@ -225,13 +227,7 @@ bool app_motor_debug_accept_temperature(board_can_bus_t bus, const board_can_fra
 
 static bool motor_mode_selected(void)
 {
-    unsigned int code = 0;
-    for (unsigned int bit = 0; bit < 4U; ++bit) {
-        bool high;
-        if (!board_gpio_read_input((board_gpio_input_t)(BOARD_GPIO_INPUT_DIP_0 + bit), &high)) { return false; }
-        if (!high) { code |= 1U << bit; }
-    }
-    return code == DEBUG_MODE_CODE;
+    return user_mode_code() == DEBUG_MODE_CODE;
 }
 
 static uint16_t state_id(unsigned int bus)
@@ -476,7 +472,8 @@ void app_motor_debug_rtt_command(const char *command)
     bool positive = strcmp(command, "drive+") == 0;
     if (!initialize && !positive && strcmp(command, "drive-") != 0) { return; }
     motor_debug_state_t action = initialize ? MOTOR_DEBUG_INIT : MOTOR_DEBUG_DRIVE;
-    if (app_board_reset_status() != BOARD_RESET_READY || app_steer_update_locked() ||
+    if (app_board_reset_status() != BOARD_RESET_READY || app_steer_update_locked() || app_power_update_locked() ||
+        !power_board_battery_fresh(now) ||
         !app_motor_debug_idle() || !neutral_seen || !mode_active || fault || any_stop_pending() ||
         !motion_ready(action, now, true)) {
         board_debug_rtt_write(initialize ? "REJECT init\n" : "REJECT drive\n");
@@ -506,7 +503,7 @@ static bool motion_released(user_switch_t key, uint32_t now)
 void app_motor_debug_process(void)
 {
     uint32_t now = board_millis();
-    if (app_steer_update_locked()) {
+    if (app_steer_update_locked() || app_power_update_locked()) {
         neutral_seen = false;
         for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) { invalidate_range(&steering[bus]); }
         return;
@@ -536,10 +533,11 @@ void app_motor_debug_process(void)
     if (motion != MOTOR_DEBUG_OFF) {
         bool init_finished = motion == MOTOR_DEBUG_INIT &&
             (init_waiting == 0U || !fresh(now, motion_at, INITIALIZE_TIMEOUT_MS));
-        if (expired || interrupted || motion_released(key, now) || init_finished ||
+        if (expired || interrupted || !power_board_battery_fresh(now) || motion_released(key, now) || init_finished ||
             !motion_ready(motion, now, false)) { begin_stop(now); }
     }
     send_stops(now);
+    if (!power_board_battery_fresh(now)) { neutral_seen = false; return; }
     if (!mode_active || fault || any_stop_pending()) { return; }
 
     if (motion == MOTOR_DEBUG_OFF) { read_ranges(now); }

@@ -49,6 +49,8 @@ target_sources(${CMAKE_PROJECT_NAME} PRIVATE
     Application/App/app_debug_uart.c
     Application/App/app_board_reset.c
     Application/App/app_host_rtt.c
+    Application/App/app_power_features.c
+    Application/App/app_power_update.c
     Application/App/app_steer_update.c
     Application/App/app_monitor.c
     Application/App/app_motor_debug.c

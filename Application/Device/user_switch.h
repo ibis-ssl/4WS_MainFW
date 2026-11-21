@@ -15,4 +15,6 @@ typedef enum {
 } user_switch_t;
 user_switch_t user_switch_decode(uint16_t raw, bool valid);
 user_switch_t user_switch_read(void);
+/* DIPの接点閉成を1とし、ビット0～3を物理端子順に読む。 */
+uint8_t user_mode_code(void);
 #endif

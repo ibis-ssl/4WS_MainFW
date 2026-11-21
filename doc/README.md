@@ -9,6 +9,7 @@
 | ステア温度の読取りとCM4相当のステアFW更新 | [温度とステアFW更新](steer_fw_update.md) |
 | デバッグUARTのOrion互換項目と4WSで変更する表示 | [Orion出力比較](design/debug_uart_orion.md) |
 | 電源基板のPowerOn継続送信とOrionとの対応 | [Orionの電源CAN](design/orion_power_can.md) |
+| 電源監視、キッカー／ドリブラーの試験、電源FW更新 | [電源基板の操作](power_bringup.md) |
 | ピン・回路、既存ドライバ、診断 | [ハードウェア](hardware.md)、[基礎ドライバ](drivers.md)、[CAN・IMU・OLED](peripherals.md)、[コード階層](architecture.md) |
 | 共通契約とMainFWの責務 | [管理境界](specs_migration.md)、[共通仕様](../specs/README.md) |
 | AtlasのCAN ID・DLC・配置・周期 | [接続仕様](design/atlas_can.md)、[ID一覧](design/atlas_can_ids.csv) |

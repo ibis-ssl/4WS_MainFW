@@ -17,6 +17,8 @@
 #include "App/app_steer_update.h"
 #include "App/app_control.h"
 #include "App/app_motor_debug.h"
+#include "App/app_power_features.h"
+#include "App/app_power_update.h"
 #include "Board/board_gpio.h"
 #include "Device/orion_can.h"
 #include "Board/board_control_timer.h"
@@ -492,6 +494,7 @@ static bool inject_range_reply(unsigned int bus)
     return true;
 }
 
+static bool mock_power_silent;
 static void motor_ticks(unsigned int ms, uint16_t key_adc, bool c610_can2, uint8_t calibration_state)
 {
     while (ms-- != 0U) {
@@ -521,6 +524,10 @@ static void motor_ticks(unsigned int ms, uint16_t key_adc, bool c610_can2, uint8
                     if (!has_reply) { inject(bus, (uint16_t)(0x202U + first), zeros); }
                 }
             }
+        }
+        if (!mock_power_silent && mock_tick % 20U == 0U) {
+            const uint8_t battery[8] = {0, 0, 0xc0, 0x41};
+            inject(POWER_BOARD_CAN_BUS, 0x215U, battery);
         }
         app_process();
         for (unsigned int bus = 0; bus < BOARD_CAN_COUNT; ++bus) {
@@ -859,6 +866,168 @@ static void test_steer_update(void)
     assert(keepalives > 1U);
 }
 
+static void test_power_bench(void)
+{
+    assert(app_init());
+    motor_ticks(700, 4095, true, 3);
+    assert(power_board_supply_on());
+    unsigned int params = 0;
+    for (unsigned int i = 0; i < can_sent_count[1]; ++i) {
+        if (sent[1][i].id == 0x010 && sent[1][i].data[0] != 0U) {
+            assert(sent[1][i].data[0] == ++params);
+        }
+    }
+    assert(params == 5);
+    board_can_frame_t mouse = {.id = 0x241, .length = 6, .data = {0xfe,0xff,0x34,0x12,0x23,0x01}, .received_ms = mock_tick};
+    int16_t dx, dy; uint16_t quality;
+    assert(app_power_features_accept(BOARD_CAN_2, &mouse));
+    assert(app_power_features_mouse(mock_tick, &dx, &dy, &quality) && dx == -2 && dy == 0x1234 && quality == 0x123);
+    assert(!app_power_features_mouse(mock_tick + 200U, &dx, &dy, &quality));
+    board_can_frame_t flags = {.id=0x244,.length=8,.data={0x18},.received_ms=mock_tick};
+    board_can_frame_t cap = {.id=0x216,.length=4,.data={0,0,0xc8,0x42},.received_ms=mock_tick};
+    assert(power_board_accept(BOARD_CAN_2, &flags) && power_board_accept(BOARD_CAN_2, &cap));
+    mock_gpio_low = 6;
+    motor_ticks(35, 4095, true, 3);
+    motor_ticks(35, 0, true, 3);
+    assert(app_power_features_bench_idle());
+    motor_ticks(35, 4095, true, 3);
+    motor_ticks(35, 2400, true, 3);
+    assert(!app_power_features_bench_idle());
+    assert(latest_tx(1, 0x110)->data[0] == 1U && latest_tx(1, 0x110)->data[1] == 1U);
+    bool target_100v = false;
+    for (unsigned int i = 0; i < can_sent_count[1]; ++i) {
+        const board_can_frame_t *tx = &sent[1][i];
+        if (tx->id == 0x110 && tx->data[0] == 0U && tx->data[6] == 0xc8 && tx->data[7] == 0x42) { target_100v = true; }
+    }
+    assert(target_100v);
+    flags.received_ms = cap.received_ms = mock_tick;
+    assert(power_board_accept(BOARD_CAN_2, &flags) && power_board_accept(BOARD_CAN_2, &cap));
+    motor_ticks(35, 4095, true, 3);
+    motor_ticks(35, 0, true, 3);
+    assert(latest_tx(1, 0x110)->data[0] == 3U && latest_tx(1, 0x110)->data[1] == 127U);
+    unsigned int shot_count = can_sent_count[1];
+    motor_ticks(35, 0, true, 3);
+    for (unsigned int i = shot_count; i < can_sent_count[1]; ++i) { assert(sent[1][i].id != 0x110); }
+    mock_gpio_low = 0;
+    motor_ticks(30, 4095, true, 3);
+    assert(latest_tx(1, 0x110)->data[0] == 1U && latest_tx(1, 0x110)->data[1] == 0U);
+    assert(app_power_features_bench_idle());
+
+    mock_gpio_low = 4;
+    motor_ticks(35, 4095, true, 3);
+    board_can_frame_t esc = {.id=0x204,.length=8,.received_ms=mock_tick};
+    assert(app_power_features_accept(BOARD_CAN_1, &esc) && !app_power_features_accept(BOARD_CAN_2, &esc));
+    motor_ticks(35, 0, true, 3);
+    assert(latest_tx(0, 0x104) && latest_tx(0, 0x104)->data[3] != 0U);
+    mock_power_silent = true;
+    motor_ticks(100, 0, true, 3);
+    esc.received_ms = mock_tick;
+    assert(app_power_features_accept(BOARD_CAN_1, &esc));
+    motor_ticks(105, 0, true, 3);
+    assert(latest_tx(0, 0x104)->data[3] == 0U);
+    assert(power_board_supply_on());
+
+    board_can_frame_t fault_frame = {.id=0,.length=8,.data={100,0,4},.received_ms=mock_tick};
+    assert(power_board_accept(BOARD_CAN_2, &fault_frame));
+    motor_ticks(3, 4095, true, 3);
+    assert(latest_tx(0, 0x000) && latest_tx(1, 0x000));
+    assert(latest_tx(1, 0x010)->data[1] == 0U);
+    const unsigned int reset_at = can_sent_count[1];
+    motor_ticks(510, 0, true, 3);
+    assert(latest_tx(1, 0x001) >= &sent[1][reset_at]);
+}
+
+static uint32_t power_word(const uint8_t *data)
+{
+    return (uint32_t)data[0] | (uint32_t)data[1] << 8 | (uint32_t)data[2] << 16 | (uint32_t)data[3] << 24;
+}
+
+static void test_power_firmware(void)
+{
+    assert(app_init());
+    motor_ticks(700, 4095, true, 3);
+    assert(power_board_supply_on());
+    static const uint8_t image[1060] = { [1]=0x10,[3]=0x20,[4]=9,[5]=0x40,[7]=8,
+        [1024]='F',[1025]='W',[1026]='V',[1027]='R',[1028]=0x78,[1029]=0x56,[1030]=0x34,[1031]=0x12,[1059]=0xab };
+    const uint32_t crc = 0xf26ee873U;
+    const uint8_t version[8] = {0x78,0x56,0x34,0x12,0x73,0xe8,0x6e,0xf2};
+    rtt_input = "pwr_version\n";
+    motor_ticks(1,4095,true,3);
+    assert(strcmp(rtt_output,"OK pwr\n") == 0 && latest_tx(1,0x611)->data[0] == 100U);
+    board_can_frame_t frame = {.id=0x6c4,.length=8,.received_ms=mock_tick};
+    memcpy(frame.data, version, 8);
+    assert(!app_power_update_accept(BOARD_CAN_1,&frame) && app_power_update_accept(BOARD_CAN_2,&frame));
+    rtt_input = "pwr_version_status\n";
+    motor_ticks(1,4095,true,3);
+    assert(strcmp(rtt_output,"PVER valid=1 build=12345678 crc=F26EE873\n") == 0);
+    uint32_t received = 0, frame_count = 0;
+    bool entered = false, restart = false, missed_response = false, finalized = false;
+    unsigned int off_replies = 0;
+    unsigned int cursor = can_sent_count[1];
+    assert(app_power_update_begin(sizeof(image), crc, 0x12345678U, mock_tick));
+    assert(app_power_update_stage(0, image, 896, mock_tick) && app_power_update_commit(mock_tick));
+    for (unsigned int t = 0; t < 3000 && app_power_update_locked(); ++t) {
+        mock_tick++;
+        can_free[0] = can_free[1] = 3;
+        power_update_status_t s = app_power_update_status();
+        if (s.state == POWER_UP_STAGING && s.written == 896U) {
+            assert(app_power_update_stage(896, image + 896, sizeof(image) - 896, mock_tick));
+            assert(app_power_update_commit(mock_tick));
+        }
+        while (cursor < can_sent_count[1]) {
+            const board_can_frame_t *tx = &sent[1][cursor++];
+            uint8_t response[8] = {0};
+            uint32_t value = 0;
+            uint16_t reply_id = 0;
+            if (tx->id == 0x010) {
+                assert(tx->data[1] == 0U && !entered);
+                reply_id = 0x244;
+                if (++off_replies <= 2U) { response[0] = 0x18U; }
+            }
+            if (tx->id == 0x611) { memcpy(response, version, 8); reply_id = 0x6c4; }
+            if (tx->id == 0x600) {
+                assert(!entered && off_replies >= 4U && memcmp(tx->data,"OFWUP",5)==0 && tx->data[5]==100);
+                entered = true;
+            }
+            if (tx->id >= 0x480 && tx->id <= 0x4ff) {
+                assert(entered && tx->id == 0x480U + frame_count);
+                for (unsigned int i = 0; i < 7U; ++i) {
+                    uint32_t at = received + frame_count * 7U + i;
+                    assert(tx->data[1U + i] == (at < sizeof(image) ? image[at] : 0xff));
+                }
+                frame_count++;
+            }
+            if (tx->id == 0x610) {
+                assert(entered && tx->data[1] == 100);
+                reply_id = 0x6b4;
+                response[0] = tx->data[0] | 0x80U; response[2] = 100; response[3] = tx->data[2];
+                switch (tx->data[0]) {
+                case 1: value = received; break;
+                case 2: assert(power_word(tx->data+4) == sizeof(image)); break;
+                case 3: assert(power_word(tx->data+4) == crc); break;
+                case 4: assert(power_word(tx->data+4) == received); frame_count = 0; break;
+                case 5:
+                    assert(frame_count == (received ? 24U : 128U));
+                    assert(power_word(tx->data+4) == (received ? 0xe0b6041dU : 0x28062212U));
+                    received = received ? sizeof(image) : 896U;
+                    if (!missed_response) { missed_response = true; reply_id = 0; }
+                    value = received; break;
+                case 6: assert(received == sizeof(image)); finalized = true; break;
+                case 7: assert(finalized); restart = true; break;
+                default: assert(false);
+                }
+                for (unsigned int i = 0; i < 4U; ++i) { response[4U+i] = (uint8_t)(value >> (8U*i)); }
+            }
+            if (reply_id) { inject(1, reply_id, response); }
+        }
+        if (restart && mock_tick % 20U == 0U) { inject(1, 0x215, (const uint8_t[8]){0,0,0xc0,0x41}); }
+        app_process();
+        rx_position[1] = 0;
+    }
+    assert(entered && missed_response && restart && finalized);
+    assert(app_power_update_status().state == POWER_UP_DONE && app_power_update_status().written == sizeof(image));
+}
+
 int main(int argc, char **argv)
 {
     void test_peripherals(void);
@@ -868,6 +1037,8 @@ int main(int argc, char **argv)
     if (argc>1 && strcmp(argv[1],"boot")==0) { test_startup_reset_failure(); puts("PASS: startup reset timeout, offset fallback and interlock"); return 0; }
     if (argc>1 && strcmp(argv[1],"update")==0) { test_steer_update(); puts("PASS: steering temperatures and RTT-to-CAN firmware update"); return 0; }
     if (argc>1 && strcmp(argv[1],"power")==0) { test_power_supply(); puts("PASS: power keepalive, HV standby and shutdown"); return 0; }
+    if (argc>1 && strcmp(argv[1],"power-bench")==0) { test_power_bench(); puts("PASS: power limits, mouse and kicker mode interlock"); return 0; }
+    if (argc>1 && strcmp(argv[1],"power-fw")==0) { test_power_firmware(); puts("PASS: power firmware update, recovery after lost block ACK and boot verification"); return 0; }
     test_can(); test_uart(); test_adc_switch(); test_buzzer(); test_power();
     test_control_timer();
     assert(mock_primask==0); puts("PASS: CAN/UART/ADC/SW/PWM/power driver tests"); return 0;

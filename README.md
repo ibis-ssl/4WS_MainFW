@@ -56,6 +56,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File ./Script/build.ps1 -Configur
 | [コード階層](doc/architecture.md) | 責務・依存方向、旧世代からの整理、ドライバ実装方針 |
 | [ドライバ互換調査（履歴）](doc/driver_compatibility.md) | 2026-09-13時点の旧ソース調査。現在の仕様は基礎ドライバ・CAN・IMU・OLEDを参照 |
 | [基礎ドライバ](doc/drivers.md) | 現在の実装仕様、API、DMA・IRQの管理、[UART4のページとキー操作](doc/drivers.md#uart4デバッグ) |
+| [電源基板の操作](doc/power_bringup.md) | 電源監視、キッカー／ドリブラー試験、マウス帰還、RTT経由の電源FW更新 |
 | [CAN・IMU・OLED](doc/peripherals.md) | Orion受信形式、ICM-20602取得、SH1106診断表示、SWD読取り |
 | [ハードウェア](doc/hardware.md) | 周辺HWの定義、SW・DIPの回路図対応とIO設定、MCU・クロック・周辺機能の現行設定 |
 | [開発手順](doc/development.md) | ビルド、成果物、書き込み、CubeMX再生成 |

@@ -20,6 +20,13 @@ void power_board_supply_start(uint32_t now);
 void power_board_supply_process(uint32_t now, bool allowed);
 const char *power_board_supply_status(void);
 bool power_board_supply_fault(void);
+bool power_board_supply_on(void);
+bool power_board_configure_step(void);
+void power_board_reconfigure(void);
+bool power_board_test_charge(void);
+void power_board_test_stop(void);
+bool power_board_test_kick(bool chip, uint32_t now);
+bool power_board_battery_fresh(uint32_t now);
 /* 電源バスの受信だけを状態に反映する。validは受信済みを表す。 */
 bool power_board_accept(board_can_bus_t bus, const board_can_frame_t *frame);
 bool power_board_get_status(board_can_bus_t bus, power_board_status_t *status);

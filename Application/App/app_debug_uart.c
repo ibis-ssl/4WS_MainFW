@@ -3,6 +3,7 @@
 #include "App/app_board_reset.h"
 #include "App/app_monitor.h"
 #include "App/app_motor_debug.h"
+#include "App/app_power_features.h"
 #include "Board/board_control_timer.h"
 #include "Board/board_debug_uart.h"
 #include "Board/board_gpio.h"
@@ -254,6 +255,20 @@ static void kicker(const power_board_status_t *power, uint32_t now)
     if (power->fault_seen) { append(" Err=%4X", (unsigned)power->fault_code); }
     else { append(" Err=%4s", "--"); }
     append(" Val="); decimal(power->fault_value, true, 7, power->fault_seen ? NULL : "--");
+    bool low = power_board_battery_fresh(now) && power->battery_voltage < 22.5f;
+    bool hot = power->temperature_valid && now - power->temperature_ms < 200U &&
+               (power->fet_temp > 70U || power->coil_temp[0] > 70U || power->coil_temp[1] > 70U);
+    if (low || hot) { append(" \x1b[33mLo=%u Hi=%u\x1b[0m", (unsigned)low, (unsigned)hot); }
+    else { append(" Lo=0 Hi=0"); }
+    append(" To=%u", (unsigned)!power_board_battery_fresh(now));
+}
+
+static void mouse_page(uint32_t now)
+{
+    int16_t dx, dy;
+    uint16_t quality;
+    if (!app_power_features_mouse(now, &dx, &dy, &quality)) { append("CAN mouse=--"); return; }
+    append("CAN X=%+6d Y=%+6d Q=%5u", dx, dy, (unsigned)quality);
 }
 
 static void uart_raw(void)
@@ -304,6 +319,14 @@ void app_debug_uart_process(uint32_t now)
     switch (page) {
     case MOTOR: motor(now); break;
     case KICKER: kicker(&power, now); break;
+    case MOUSE: mouse_page(now); break;
+    case DRIBBLER: {
+        float rps;
+        append("R[rps]=");
+        bool valid = app_power_features_dribbler(now, &rps);
+        decimal(rps, true, 7, valid ? NULL : "--");
+        break;
+    }
     case ODOM: odom(); break;
     case MOTION: motion(now); break;
     case SYSTEM: system_page(); break;

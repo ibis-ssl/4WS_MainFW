@@ -18,7 +18,7 @@ static int32_t signed_le(const uint8_t *p)
 }
 bool orion_telemetry_decode(uint16_t id, const uint8_t *data, uint8_t length, orion_value_t *out)
 {
-    if (data == NULL || out == NULL || length != 8U) { return false; }
+    if (data == NULL || out == NULL || (length != 8U && !(id == 0x241U && length == 6U))) { return false; }
     orion_value_t v = {0};
     if (id <= 0x001U) {
         v.kind = ORION_ERROR; v.index = (uint8_t)id;
