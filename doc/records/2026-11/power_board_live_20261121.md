@@ -16,3 +16,5 @@
 FW読取り照会 `0x611` を両バスに各3回送った。CAN1は応答0回、CAN2は `0x6C4` で3回応答し、すべてビルドID `6B0171D2` とCRC32C `FD351EE0` が電源基板のSWD読取りと一致した。電源基板はCAN2で通信しており、PowerOnの送信先はCAN1。配線上の分岐点やコネクターの取り違え箇所は未特定。
 
 電源のSWD Hot Plugで3回確認し、bxCANの `ESR=0`、TEC／RECとも0、`sw_enable_cnt=0`、`power_enabled=0`、PB2出力Low、昇圧／キッカーPWM 0を記録した。給電指令、リセット、FW書込みは追加していない。ログは `build/hardware/power-live-20261121-193610/` の `COM12.jsonl`、`COM46.jsonl`、`COM15.txt`、`COM167.txt`、`version-COM12.json`、`version-COM46.json`。
+
+その後のSWD再接続ではデバイス識別エラーと `DEV_USB_COMM_ERR` が出た。同時期のCAN2再照会は同じビルドIDとCRCを返し、周期通知も継続していた。追加ログは同フォルダーの `swd-state.txt`、`swd-retry.txt`、`version-final-COM46.json`。
