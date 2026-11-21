@@ -24,7 +24,7 @@ AtlasのMain―周辺基板間の具体的なID・payload・周期・予約は[C
 | CM4からの指令 | [共通コマンド](../specs/common/control_packet.md)、[4WSのモード・SPI設計案](../specs/proposals/control_modes.md) | 未実装。モードの採用設計と実際の受信・制御対応を区別する |
 | MainからCM4への帰還 | [共通128バイトfeedback](../specs/common/feedback_packet.md) | 採用設計あり。各項目の取得・格納、CRC生成、SPI送信は未実装 |
 | SPIの物理条件・転送手順 | [SPI設計案](../specs/proposals/control_modes.md#4ws-mainへのspi転送仮仕様) | 未実装。生成設定のSPI2はslave、CM4_CSはGPIO出力のため、設計案との対応確認が必要 |
-| CAN機器通信 | [Orion CAN契約](../specs/common/orion_can.md)・[Atlas CAN](design/atlas_can.md) | Classic CAN転送、Atlas/C610のデバッグ制御、CAN1電源API、Orion受信解析を実装。[バス割当](atlas_bringup.md#バスと車輪)の実配線・車輪位置は結合時に照合 |
+| CAN機器通信 | [Orion CAN契約](../specs/common/orion_can.md)・[Atlas CAN](design/atlas_can.md) | Classic CAN転送、Atlas/C610のデバッグ制御、CAN2電源API、Orion受信解析を実装。[バス割当](atlas_bringup.md#バスと車輪)の実配線・車輪位置は結合時に照合 |
 
 共通feedbackの採用設計は、転送や制御の実装完了を示しません。現在のUART4ログ・SWD診断RAMは本repoの内部診断で、CM4向けfeedbackではありません。Orionの停止条件・UART・更新方式を4WSの確定仕様へ転用しません。文書の所有範囲は[管理境界](specs_migration.md)を参照してください。
 

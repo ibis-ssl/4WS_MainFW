@@ -1,4 +1,4 @@
-/* 電源基板の接続先をCAN1に固定し、旧形式の電源管理指令を送る。 */
+/* 4WSで定めた電源バスに旧形式の電源管理指令を送る。 */
 #include "Device/power_board.h"
 #include <stddef.h>
 static power_board_status_t statuses[BOARD_CAN_COUNT];
@@ -8,7 +8,7 @@ static uint32_t requested_ms;
 static bool immediate_off, high_voltage_fault;
 static uint8_t send_power(uint16_t id, const uint8_t data[8])
 {
-    return board_can_send(BOARD_CAN_1, id, data) ? 1U : 0U;
+    return board_can_send(POWER_BOARD_CAN_BUS, id, data) ? 1U : 0U;
 }
 uint8_t power_board_set_on(bool on)
 {
@@ -24,7 +24,7 @@ uint8_t power_board_request_reset(void)
 {
     uint8_t data[8];
     power_packet_reset(data);
-    return board_can_send_immediate(BOARD_CAN_1, 0x001U, data, 8) ? 1U : 0U;
+    return board_can_send_immediate(POWER_BOARD_CAN_BUS, 0x001U, data, 8) ? 1U : 0U;
 }
 
 void power_board_supply_start(uint32_t now)
@@ -46,7 +46,7 @@ void power_board_supply_process(uint32_t now, bool allowed)
     if (on && supply == SUPPLY_OFF) {
         /* 充電停止は電源FWの給電タイマーも解除する。PowerOnより前に送る。 */
         power_packet_stop_charge(data);
-        if (board_can_send_immediate(BOARD_CAN_1, HIGH_VOLTAGE_ID, data, 8)) {
+        if (board_can_send_immediate(POWER_BOARD_CAN_BUS, HIGH_VOLTAGE_ID, data, 8)) {
             supply = SUPPLY_ARMING;
             requested_ms = now;
             immediate_off = false;
@@ -55,9 +55,9 @@ void power_board_supply_process(uint32_t now, bool allowed)
     }
     if (!immediate_off && now - requested_ms < SUPPLY_PERIOD_MS) { return; }
     /* ACK待ちで滞った前回分を残さず、最新の許可状態だけを直送する。 */
-    board_can_cancel_immediate_id(BOARD_CAN_1, POWER_SWITCH_ID);
+    board_can_cancel_immediate_id(POWER_BOARD_CAN_BUS, POWER_SWITCH_ID);
     power_packet_on(on, data);
-    if (!board_can_send_immediate(BOARD_CAN_1, POWER_SWITCH_ID, data, 8)) { return; }
+    if (!board_can_send_immediate(POWER_BOARD_CAN_BUS, POWER_SWITCH_ID, data, 8)) { return; }
     if (on && supply == SUPPLY_ARMING) {
         supply = SUPPLY_ON;
     }
@@ -73,11 +73,11 @@ const char *power_board_supply_status(void)
 }
 bool power_board_supply_fault(void)
 {
-    return statuses[BOARD_CAN_1].fault_seen || high_voltage_fault;
+    return statuses[POWER_BOARD_CAN_BUS].fault_seen || high_voltage_fault;
 }
 bool power_board_accept(board_can_bus_t bus, const board_can_frame_t *frame)
 {
-    if (bus != BOARD_CAN_1 || frame == NULL) { return false; }
+    if (bus != POWER_BOARD_CAN_BUS || frame == NULL) { return false; }
     power_packet_value_t value;
     if (!power_packet_decode(frame->id, frame->data, frame->length, &value)) { return false; }
     power_board_status_t *s = &statuses[bus];

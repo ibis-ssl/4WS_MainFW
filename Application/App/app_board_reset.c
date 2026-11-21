@@ -158,7 +158,7 @@ void app_board_reset_process(uint32_t now)
             board->coast_submitted = board_can_send_immediate((board_can_bus_t)i, (uint16_t)(0x350U + 2U * i), zero, 2);
         }
     }
-    if (!power_submitted && boards[BOARD_CAN_1].zero_submitted && boards[BOARD_CAN_1].coast_submitted) {
+    if (!power_submitted && boards[POWER_BOARD_CAN_BUS].zero_submitted && boards[POWER_BOARD_CAN_BUS].coast_submitted) {
         power_submitted = power_board_request_reset() != 0U;
         power_at = now;
     }

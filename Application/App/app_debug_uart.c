@@ -295,7 +295,7 @@ void app_debug_uart_process(uint32_t now)
         end_line();
     }
     power_board_status_t power;
-    (void)power_board_get_status(BOARD_CAN_1, &power);
+    (void)power_board_get_status(POWER_BOARD_CAN_BUS, &power);
     static const char *const reset[] = {"WAIT", "RDY", "FAIL"};
     motor_debug_state_t state = app_motor_debug_status();
     append("%-8s VB=", names[page]);

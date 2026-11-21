@@ -48,7 +48,7 @@ DWT CYCCNTを有効にし、制御コールバックの最大実行サイクル�
 
 ## 電源基板
 
-`Protocol/power_packet`がバイト列、`Device/power_board`がCAN1への送信と受信状態を担当する。
+`Protocol/power_packet`がバイト列、`Device/power_board`がCAN2への送信と受信状態を担当する。
 
 バイト配置・パラメーターIDの正本は[電源指令](../specs/common/orion_can.md#電源指令)、受信する値の配置は[テレメトリー](../specs/common/orion_can.md#テレメトリー)を参照。ここではAPIの対応範囲と受理条件を記載する。
 
@@ -61,9 +61,9 @@ DWT CYCCNTを有効にし、制御コールバックの最大実行サイクル�
 
 NaN・無限大・負値と、`power_param_t`の範囲外を送信しない。機器の許容上限や複数パラメーター間の整合はこのAPIで確定せず、上位が運用値を決める。
 
-指令はCAN1へ送る。戻り値は1がドライバでの受理、0が未受理を示す。リセットはハードウェアの送信枠へ直接投入する。
+指令はCAN2へ送る。戻り値は1がドライバでの受理、0が未受理を示す。リセットはハードウェアの送信枠へ直接投入する。
 
-CAN1の受信形式は次のとおり。電源基板FW `F303_boost` の `8950ebc` にある `Core/Src/can.c` の通知と `Core/Src/main.c` の `power_state_flags()` を照合した。
+CAN2の受信形式は次のとおり。電源基板FW `F303_boost` の `8950ebc` にある `Core/Src/can.c` の通知と `Core/Src/main.c` の `power_state_flags()` を照合した。
 
 | CAN ID | DLC | 内容 |
 |---|---|---|
@@ -89,12 +89,12 @@ Orionの出力項目と4WSで利用できるデータの対応は[デバッグUA
 - UARTエラー後はメイン処理で受信を再設定する。TX DMAエラーでは停止完了後にバッファを再利用する。
 - 公開APIはメイン処理専用。IRQから整形・送信APIを呼ばない。
 
-`App/app_debug_uart` は起動時にビルド日時、CAN開始、IMU／OLEDの状態、ページ一覧を出力する。既定ページは `SYSTEM`。ST-Linkの仮想COMポートを2,000,000 baud・8N1、フロー制御なしに設定すると表示を取得できる。周期表示は各ページ1行。`VB` はCAN1電源基板のバッテリー電圧（V）、`BT` は起動確認状態（`WAIT`／`RDY`／`FAIL`）、`F` はモーターデバッグのFault有無。全行をANSI制御文字とCRLF込みで200 byte以下に収め、数値は空白で列幅を揃える。
+`App/app_debug_uart` は起動時にビルド日時、CAN開始、IMU／OLEDの状態、ページ一覧を出力する。既定ページは `SYSTEM`。ST-Linkの仮想COMポートを2,000,000 baud・8N1、フロー制御なしに設定すると表示を取得できる。周期表示は各ページ1行。`VB` はCAN2電源基板のバッテリー電圧（V）、`BT` は起動確認状態（`WAIT`／`RDY`／`FAIL`）、`F` はモーターデバッグのFault有無。全行をANSI制御文字とCRLF込みで200 byte以下に収め、数値は空白で列幅を揃える。
 
 | キー | ページ | 表示 |
 |---|---|---|
 | `1` | `MOTOR` | `TG` は目標rpm。C610 ID 1～4の順に `R` は実ローターrpm、`Ir` は帰還電流raw値、`C[mA]` は指令、`A` は帰還経過時間（ms） |
-| `3` | `KICKER` | CAN1電源基板。`PW` はMainの給電要求状態（`OFF`／`ARM`／`ON`／`FLT`）。`VC` はキャパシター電圧（V）、`IB` はバッテリー電流（A）、`FET/L1/L2` は温度（℃）。`Fl` と状態ビット `Bst/Kick/Chg/En/Out`、最新Faultコード `Err`、付随値 `Val` を表示 |
+| `3` | `KICKER` | CAN2電源基板。`PW` はMainの給電要求状態（`OFF`／`ARM`／`ON`／`FLT`）。`VC` はキャパシター電圧（V）、`IB` はバッテリー電流（A）、`FET/L1/L2` は温度（℃）。`Fl` と状態ビット `Bst/Kick/Chg/En/Out`、最新Faultコード `Err`、付随値 `Val` を表示 |
 | `5` | `ODOM` | ICM-20602の識別・取得状態、3軸加速度 `Acc` と角速度 `Gyr` の生値、温度 `H`（0.1℃） |
 | `6` | `MOTION` | g0～g3の順に `T/P` は目標／実角度（mrad）、`I` は電流絶対値（mA）、`C` は校正済みフラグ、`S` は軸状態、`H` は温度（0.1℃）、`A` は帰還経過時間（ms） |
 | `9` | `SYSTEM` | `Ad` はADC生値／有効、`E` はADCエラー。`C1/C2` は各バスの受信・受信破棄・FIFO喪失・bus-off・送信投入・送信エラー・送信退避・送信破棄。`T` はTIM6呼出し数・超過数・最大実行サイクル・最大進入遅延µs。`O` はOLEDアドレス・表示回数・エラー数 |
